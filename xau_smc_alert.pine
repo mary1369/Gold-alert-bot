@@ -1,0 +1,155 @@
+//@version=5
+indicator("XAU-SMC Alert Bot", overlay=true, max_lines_count=300, max_labels_count=300, max_boxes_count=300)
+
+// ============ SETTINGS ============
+swingLen      = input.int(5, "Swing Length (structure detection)", minval=2)
+atrLen        = input.int(14, "ATR Length (for SL/TP distance)")
+slAtrMult     = input.float(1.2, "SL = ATR x", step=0.1)
+tp1AtrMult    = input.float(1.0, "TP1 = ATR x", step=0.1)
+tp2AtrMult    = input.float(2.0, "TP2 = ATR x", step=0.1)
+tp3AtrMult    = input.float(3.0, "TP3 = ATR x", step=0.1)
+fvgMinPts     = input.float(0.0, "Min FVG size (price units, 0=off)")
+requireFVGorOB = input.bool(true, "Require price to be inside OB or FVG zone to fire signal")
+
+// ============ SWING STRUCTURE ============
+ph = ta.pivothigh(high, swingLen, swingLen)
+pl = ta.pivotlow(low, swingLen, swingLen)
+
+var float lastSwingHigh = na
+var float lastSwingLow  = na
+var int   trend = 0   // 1 = bullish structure, -1 = bearish structure, 0 = undefined
+
+if not na(ph)
+    lastSwingHigh := ph
+if not na(pl)
+    lastSwingLow := pl
+
+// Break of structure detection
+bullBreak = not na(lastSwingHigh) and ta.crossover(close, lastSwingHigh)
+bearBreak = not na(lastSwingLow)  and ta.crossunder(close, lastSwingLow)
+
+var string lastEvent = ""   // "BOS_UP", "CHOCH_UP", "BOS_DOWN", "CHOCH_DOWN"
+
+if bullBreak
+    lastEvent := trend == -1 ? "CHOCH_UP" : "BOS_UP"
+    trend := 1
+if bearBreak
+    lastEvent := trend == 1 ? "CHOCH_DOWN" : "BOS_DOWN"
+    trend := -1
+
+structureShift = bullBreak or bearBreak
+
+// plot swing break labels
+if bullBreak
+    label.new(bar_index, low, lastEvent == "CHOCH_UP" ? "CHoCH↑" : "BOS↑", style=label.style_label_up, color=color.new(color.lime, 0), textcolor=color.black, size=size.small)
+if bearBreak
+    label.new(bar_index, high, lastEvent == "CHOCH_DOWN" ? "CHoCH↓" : "BOS↓", style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+// ============ ORDER BLOCK (last opposite candle before displacement break) ============
+// bullish OB = last down-close candle before an up displacement that caused bullBreak
+// bearish OB = last up-close candle before a down displacement that caused bearBreak
+var float obTop = na
+var float obBot = na
+var int   obDir = 0   // 1 bullish OB, -1 bearish OB
+var int   obBarIndex = na
+
+findLastOppositeBar(isBull) =>
+    idx = bar_index
+    found = false
+    resTop = float(na)
+    resBot = float(na)
+    for i = 1 to 20
+        c_close = close[i]
+        c_open  = open[i]
+        if isBull and c_close < c_open and not found
+            resTop := math.max(c_open, c_close)
+            resBot := math.min(open[i], low[i])
+            found := true
+        if not isBull and c_close > c_open and not found
+            resTop := math.max(open[i], high[i])
+            resBot := math.min(c_open, c_close)
+            found := true
+    [resTop, resBot, found]
+
+if bullBreak
+    [t, b, f] = findLastOppositeBar(true)
+    if f
+        obTop := t
+        obBot := b
+        obDir := 1
+        obBarIndex := bar_index
+        box.new(bar_index[1], obTop, bar_index + 15, obBot, border_color=color.new(color.lime, 40), bgcolor=color.new(color.lime, 85))
+
+if bearBreak
+    [t, b, f] = findLastOppositeBar(false)
+    if f
+        obTop := t
+        obBot := b
+        obDir := -1
+        obBarIndex := bar_index
+        box.new(bar_index[1], obTop, bar_index + 15, obBot, border_color=color.new(color.red, 40), bgcolor=color.new(color.red, 85))
+
+// ============ FVG (3-candle gap) ============
+bullFVG = low > high[2] and (fvgMinPts == 0 or (low - high[2]) >= fvgMinPts)
+bearFVG = high < low[2] and (fvgMinPts == 0 or (low[2] - high) >= fvgMinPts)
+
+var float fvgTop = na
+var float fvgBot = na
+var int   fvgDir = 0
+
+if bullFVG
+    fvgTop := low
+    fvgBot := high[2]
+    fvgDir := 1
+if bearFVG
+    fvgTop := low[2]
+    fvgBot := high
+    fvgDir := -1
+
+// ============ PRICE IN ZONE ============
+inBullZone = (obDir == 1 and close <= obTop and close >= obBot) or (fvgDir == 1 and close <= fvgTop and close >= fvgBot)
+inBearZone = (obDir == -1 and close <= obTop and close >= obBot) or (fvgDir == -1 and close <= fvgTop and close >= fvgBot)
+
+// ============ CANDLE CONFIRMATION ============
+bullEngulf = close > open and close[1] < open[1] and close > open[1] and open < close[1]
+bearEngulf = close < open and close[1] > open[1] and close < open[1] and open > close[1]
+bullPin    = (close > open) and ((open - low) > math.abs(close - open) * 1.5) and ((high - close) < math.abs(close - open))
+bearPin    = (close < open) and ((high - open) > math.abs(close - open) * 1.5) and ((close - low) < math.abs(close - open))
+bullConfirm = bullEngulf or bullPin
+bearConfirm = bearEngulf or bearPin
+
+// ============ FINAL SIGNAL ============
+atrVal = ta.atr(atrLen)
+
+zoneOkBuy  = requireFVGorOB ? inBullZone : true
+zoneOkSell = requireFVGorOB ? inBearZone : true
+
+buySignal  = trend == 1  and zoneOkBuy  and bullConfirm and (lastEvent == "CHOCH_UP" or lastEvent == "BOS_UP")
+sellSignal = trend == -1 and zoneOkSell and bearConfirm and (lastEvent == "CHOCH_DOWN" or lastEvent == "BOS_DOWN")
+
+buyEntry  = close
+buySL     = close - atrVal * slAtrMult
+buyTP1    = close + atrVal * tp1AtrMult
+buyTP2    = close + atrVal * tp2AtrMult
+buyTP3    = close + atrVal * tp3AtrMult
+
+sellEntry = close
+sellSL    = close + atrVal * slAtrMult
+sellTP1   = close - atrVal * tp1AtrMult
+sellTP2   = close - atrVal * tp2AtrMult
+sellTP3   = close - atrVal * tp3AtrMult
+
+plotshape(buySignal, title="BUY signal", style=shape.triangleup, location=location.belowbar, color=color.lime, size=size.small)
+plotshape(sellSignal, title="SELL signal", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small)
+
+// ============ ALERTS (JSON payload for webhook) ============
+buyMsg  = '{"direction":"BUY","symbol":"' + syminfo.ticker + '","entry":"' + str.tostring(buyEntry) + '","sl":"' + str.tostring(buySL) + '","tp1":"' + str.tostring(buyTP1) + '","tp2":"' + str.tostring(buyTP2) + '","tp3":"' + str.tostring(buyTP3) + '","event":"' + lastEvent + '","tf":"' + timeframe.period + '"}'
+sellMsg = '{"direction":"SELL","symbol":"' + syminfo.ticker + '","entry":"' + str.tostring(sellEntry) + '","sl":"' + str.tostring(sellSL) + '","tp1":"' + str.tostring(sellTP1) + '","tp2":"' + str.tostring(sellTP2) + '","tp3":"' + str.tostring(sellTP3) + '","event":"' + lastEvent + '","tf":"' + timeframe.period + '"}'
+
+alertcondition(buySignal, title="XAU-SMC BUY", message='{"direction":"BUY","symbol":"{{ticker}}","entry":"{{close}}","tf":"{{interval}}","time":"{{time}}"}')
+alertcondition(sellSignal, title="XAU-SMC SELL", message='{"direction":"SELL","symbol":"{{ticker}}","entry":"{{close}}","tf":"{{interval}}","time":"{{time}}"}')
+
+if buySignal
+    alert(buyMsg, alert.freq_once_per_bar_close)
+if sellSignal
+    alert(sellMsg, alert.freq_once_per_bar_close)
