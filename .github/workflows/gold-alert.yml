@@ -30,6 +30,6 @@ jobs:
         run: |
           git config user.name "gold-alert-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add candles.json state.json
+          git add xauusd_m5.json state_v2.json
           git diff --quiet --cached || git commit -m "update candle state [skip ci]"
           git push
