@@ -29,7 +29,6 @@ jobs:
           node-version: "20"
 
       - name: Telegram connectivity test (one time)
-        if: ${{ !cancelled() }}
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -46,6 +45,23 @@ jobs:
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=🟢 Gold-alert-bot TEST — Telegram connection OK — one-time test" >/dev/null
           printf '{"sent":true,"type":"connectivity-test"}\n' > telegram_test_sent.json
+
+      - name: Refresh XAUUSD M5 history (free)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=300" -o /tmp/xau.json
+          node <<'NODE'
+          const fs = require('fs');
+          const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
+          if (!Array.isArray(j.bars)) throw new Error('Biquote: missing bars');
+          const bars = j.bars.filter(b => !b.isOpen && [b.open,b.high,b.low,b.close].every(Number.isFinite))
+            .map(b => ({time: Date.parse(b.openTime), open:b.open, high:b.high, low:b.low, close:b.close}))
+            .sort((a,b)=>a.time-b.time);
+          if (bars.length < 80) throw new Error(`Biquote: only ${bars.length} closed M5 bars`);
+          fs.writeFileSync('xauusd_m5.json', JSON.stringify(bars.slice(-300), null, 2));
+          console.log(`Loaded ${Math.min(300,bars.length)} closed XAUUSD M5 bars from Biquote`);
+          NODE
 
       - name: Run XAUUSD M5 analysis
         env:
@@ -64,6 +80,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
-            git commit -m "update XAUUSD alert state [skip ci]"
+            git commit -m "refresh XAUUSD data and alert state [skip ci]"
             git push
           fi
