@@ -87,11 +87,11 @@ jobs:
       - name: Syntax check V3
         run: node --check server_v3.js
 
-      - name: Run XAUUSD V3 analysis
+      - name: Run XAUUSD V3 analysis (strict Order Flow gate)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node server_v3.js
+        run: node orderflow_gate.js
 
       - name: Commit state
         if: ${{ !cancelled() }}
@@ -104,6 +104,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
-            git commit -m "fix XAUUSD history refresh and state commit [skip ci]"
+            git commit -m "enforce strict MT5 order flow gate [skip ci]"
             git push
           fi
