@@ -1,0 +1,20 @@
+name: Order Flow adapter test
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'orderflow/**'
+      - '.github/workflows/orderflow-test.yml'
+  workflow_dispatch:
+
+jobs:
+  test-orderflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run adapter tests
+        run: node orderflow/dukascopy_adapter.test.js
