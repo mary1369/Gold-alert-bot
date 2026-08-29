@@ -67,6 +67,9 @@ jobs:
       - name: Syntax check V3
         run: node --check server_v3.js
 
+      - name: Strict safety gate
+        run: node safety_gate_v4.js
+
       - name: Run XAUUSD V3 analysis
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
