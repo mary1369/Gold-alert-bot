@@ -1,0 +1,9 @@
+{
+  "source": "MT5_REAL_TICKS",
+  "symbol": "XAUUSD",
+  "time": "2026-08-29T00:00:00Z",
+  "delta": 0,
+  "cvdSlope": 0,
+  "imbalance": "NEUTRAL",
+  "absorption": "NONE"
+}
