@@ -1,9 +1,9 @@
 name: XAU-SMC Gold Alert
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   check-price:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repo
@@ -28,31 +28,36 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Send one-time Telegram connectivity test
+      - name: Telegram connectivity test (one time)
+        if: ${{ !cancelled() }}
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         shell: bash
         run: |
+          set -euo pipefail
           if [ -f telegram_test_sent.json ]; then
-            echo "Telegram one-time test already sent; skipping."
+            echo "One-time Telegram test already sent; skipping."
             exit 0
           fi
-          response=$(curl -sS --fail-with-body -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+          test -n "${TELEGRAM_TOKEN:-}" || { echo "TELEGRAM_TOKEN is missing"; exit 1; }
+          test -n "${TELEGRAM_CHAT_ID:-}" || { echo "TELEGRAM_CHAT_ID is missing"; exit 1; }
+          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=🟢 Gold-alert-bot TEST | Telegram connection OK | One-time test | ${GITHUB_SHA:0:7}")
-          echo "Telegram response received."
+            --data-urlencode "text=🟢 Gold-alert-bot TEST — Telegram connection OK — one-time test" >/dev/null
           printf '{"sent":true,"type":"connectivity-test"}\n' > telegram_test_sent.json
 
-      - name: Run one-shot XAUUSD M5 analysis
+      - name: Run XAUUSD M5 analysis
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node server.js
 
-      - name: Commit state and one-time test marker
+      - name: Commit state
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
+          set -e
           git config user.name "gold-alert-bot"
           git config user.email "actions@users.noreply.github.com"
           git add xauusd_m5.json state_v2.json telegram_test_sent.json
