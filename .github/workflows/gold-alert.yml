@@ -28,82 +28,76 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Telegram connectivity test (one time)
+      - name: Validate Telegram secrets are present
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f telegram_test_sent.json ]; then
-            echo "One-time Telegram test already sent; skipping."
-            exit 0
-          fi
           test -n "${TELEGRAM_TOKEN:-}" || { echo "TELEGRAM_TOKEN is missing"; exit 1; }
           test -n "${TELEGRAM_CHAT_ID:-}" || { echo "TELEGRAM_CHAT_ID is missing"; exit 1; }
-          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=🟢 Gold-alert-bot TEST — Telegram connection OK — one-time test" >/dev/null
-          printf '{"sent":true,"type":"connectivity-test"}\n' > telegram_test_sent.json
+          echo "Telegram secrets are configured."
 
-      - name: Refresh XAUUSD M5 history (Yahoo 5d, Biquote fallback)
+      - name: Refresh XAUUSD M5 history from Yahoo
         shell: bash
         run: |
           set -euo pipefail
           rm -f /tmp/xau.json
-          if curl -fsS --max-time 20 "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d" -o /tmp/xau.json; then
+          if curl -fsS --retry 2 --retry-delay 2 --max-time 25 \
+            "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d" \
+            -o /tmp/xau.json; then
             node <<'NODE'
 const fs = require('fs');
-const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
+const j = JSON.parse(fs.readFileSync('/tmp/xau.json', 'utf8'));
 const z = j?.chart?.result?.[0];
 const q = z?.indicators?.quote?.[0];
 if (!z?.timestamp?.length || !q) throw new Error('Yahoo: missing XAUUSD 5m data');
 const bars = [];
-for (let i=0;i<z.timestamp.length;i++) {
-  const o=Number(q.open?.[i]), h=Number(q.high?.[i]), l=Number(q.low?.[i]), c=Number(q.close?.[i]);
-  if ([o,h,l,c].every(Number.isFinite)) bars.push({time:z.timestamp[i]*1000,open:o,high:h,low:l,close:c,volume:Number(q.volume?.[i])||0});
+for (let i = 0; i < z.timestamp.length; i++) {
+  const o = Number(q.open?.[i]);
+  const h = Number(q.high?.[i]);
+  const l = Number(q.low?.[i]);
+  const c = Number(q.close?.[i]);
+  const v = Number(q.volume?.[i]) || 0;
+  if ([o, h, l, c].every(Number.isFinite)) bars.push({time: z.timestamp[i] * 1000, open: o, high: h, low: l, close: c, volume: v});
 }
-const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1000);
+const out = bars.filter((b, i) => i === 0 || b.time > bars[i - 1].time).slice(-1200);
 if (out.length < 300) throw new Error(`Yahoo: only ${out.length} valid M5 bars`);
-fs.writeFileSync('xauusd_m5.json',JSON.stringify(out,null,2));
-console.log(`Loaded ${out.length} closed/available XAUUSD M5 bars from Yahoo`);
+fs.writeFileSync('xauusd_m5.json', JSON.stringify(out, null, 2));
+console.log(`Loaded ${out.length} valid XAUUSD M5 bars from Yahoo`);
 NODE
           else
-            echo "Yahoo unavailable; trying Biquote fallback"
-            curl -fsS --max-time 20 "https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=1000" -o /tmp/xau.json
+            echo "Yahoo unavailable; using existing candle cache if it is valid."
             node <<'NODE'
 const fs = require('fs');
-const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
-if (!Array.isArray(j.bars)) throw new Error('Biquote: missing bars');
-const bars=j.bars.map(b=>({time:Date.parse(b.openTime),open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:Number(b.tickVolume)||0}))
-  .filter(b=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
-const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1000);
-if (out.length < 300) throw new Error(`Biquote: only ${out.length} valid M5 bars`);
-fs.writeFileSync('xauusd_m5.json',JSON.stringify(out,null,2));
-console.log(`Loaded ${out.length} XAUUSD M5 bars from Biquote fallback`);
+if (!fs.existsSync('xauusd_m5.json')) throw new Error('No Yahoo data and no candle cache');
+const bars = JSON.parse(fs.readFileSync('xauusd_m5.json', 'utf8'));
+if (!Array.isArray(bars) || bars.length < 300) throw new Error(`Candle cache invalid or too small: ${bars.length || 0}`);
+console.log(`Using cached XAUUSD M5 bars: ${bars.length}`);
 NODE
           fi
 
-      - name: Syntax check V4
-        run: node --check server_v4.js
+      - name: Syntax and dependency checks
+        run: npm run check
 
-      - name: Run XAUUSD V4 analysis (strict Order Flow gate)
+      - name: Run XAUUSD V4 analysis with strict real-MT5 Order Flow gate
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node orderflow_gate.js
 
-      - name: Commit state
+      - name: Commit state and refreshed candles
         if: ${{ !cancelled() }}
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           git config user.name "gold-alert-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add xauusd_m5.json state_v2.json telegram_test_sent.json
+          git add xauusd_m5.json state_v2.json orderflow.json
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
-            git commit -m "run Fibonacci V4 analysis [skip ci]"
+            git commit -m "update XAUUSD V4 state [skip ci]"
             git push
           fi
