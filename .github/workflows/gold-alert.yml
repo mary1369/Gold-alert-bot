@@ -84,10 +84,10 @@ console.log(`Loaded ${out.length} XAUUSD M5 bars from Biquote fallback`);
 NODE
           fi
 
-      - name: Syntax check V3
-        run: node --check server_v3.js
+      - name: Syntax check V4
+        run: node --check server_v4.js
 
-      - name: Run XAUUSD V3 analysis (strict Order Flow gate)
+      - name: Run XAUUSD V4 analysis (strict Order Flow gate)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -104,6 +104,6 @@ NODE
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
-            git commit -m "enforce strict MT5 order flow gate [skip ci]"
+            git commit -m "run Fibonacci V4 analysis [skip ci]"
             git push
           fi
