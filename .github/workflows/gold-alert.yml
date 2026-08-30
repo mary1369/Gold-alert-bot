@@ -39,19 +39,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36'
-          URL_Q2='https://query2.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d&events=div%2Csplits'
-          URL_Q1='https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d&events=div%2Csplits'
-
-          if curl -fsS --retry 1 --retry-delay 2 --max-time 25 -A "$UA" "$URL_Q2" -o /tmp/xau.json; then
-            echo 'Yahoo query2 returned XAUUSD M5 data.'
-          elif curl -fsS --retry 1 --retry-delay 2 --max-time 25 -A "$UA" "$URL_Q1" -o /tmp/xau.json; then
-            echo 'Yahoo query1 returned XAUUSD M5 data.'
-          else
-            echo 'ERROR: Yahoo Finance rejected both chart endpoints (likely HTTP 429).'
-            exit 22
-          fi
-
+          URL='https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=1000'
+          echo 'Fetching XAUUSD M5 candles from biquote...'
+          curl -fsSL --retry 3 --retry-delay 2 --max-time 30 \
+            -H 'Accept: application/json' \
+            -A 'Gold-alert-bot/1.0' \
+            "$URL" -o /tmp/xau.json
           node scripts/parse_yahoo_xau.js
 
       - name: Syntax and dependency checks
