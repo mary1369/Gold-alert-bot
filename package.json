@@ -1,10 +1,11 @@
 {
   "name": "gold-alert-bot",
-  "version": "1.0.0",
-  "description": "Receives TradingView alerts and forwards them to Telegram",
-  "main": "server.js",
+  "version": "4.0.0",
+  "description": "XAUUSD M5 SMC/ICT signal engine with strict real-MT5 Order Flow gate and Telegram alerts",
+  "main": "server_v4.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server_v4.js",
+    "check": "node --check server_v4.js && node --check orderflow_gate.js"
   },
   "engines": {
     "node": ">=18"
