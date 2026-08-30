@@ -3,7 +3,7 @@ name: XAU-SMC Gold Alert
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: '*/5 * * * *'
 
 permissions:
   contents: write
@@ -16,80 +16,41 @@ jobs:
   check-price:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
-      - name: Validate Telegram secrets are present
+      - name: Validate Telegram secrets
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        shell: bash
         run: |
-          set -euo pipefail
-          test -n "${TELEGRAM_TOKEN:-}" || { echo "TELEGRAM_TOKEN is missing"; exit 1; }
-          test -n "${TELEGRAM_CHAT_ID:-}" || { echo "TELEGRAM_CHAT_ID is missing"; exit 1; }
-          echo "Telegram secrets are configured."
+          test -n "$TELEGRAM_TOKEN" || { echo 'TELEGRAM_TOKEN is missing'; exit 1; }
+          test -n "$TELEGRAM_CHAT_ID" || { echo 'TELEGRAM_CHAT_ID is missing'; exit 1; }
 
-      - name: Refresh XAUUSD M5 history from Yahoo
+      - name: Refresh XAUUSD M5 data
         shell: bash
-        run: |
-          set -euo pipefail
-          rm -f /tmp/xau.json
-          if curl -fsS --retry 2 --retry-delay 2 --max-time 25 "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d" -o /tmp/xau.json; then
-            node -e '
-const fs=require("fs");
-const j=JSON.parse(fs.readFileSync("/tmp/xau.json","utf8"));
-const z=j?.chart?.result?.[0], q=z?.indicators?.quote?.[0];
-if(!z?.timestamp?.length||!q) throw new Error("Yahoo: missing XAUUSD 5m data");
-const bars=[];
-for(let i=0;i<z.timestamp.length;i++){
- const o=Number(q.open?.[i]),h=Number(q.high?.[i]),l=Number(q.low?.[i]),c=Number(q.close?.[i]),v=Number(q.volume?.[i])||0;
- if([o,h,l,c].every(Number.isFinite)) bars.push({time:z.timestamp[i]*1000,open:o,high:h,low:l,close:c,volume:v});
-}
-const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1200);
-if(out.length<300) throw new Error(`Yahoo: only ${out.length} valid M5 bars`);
-fs.writeFileSync("xauusd_m5.json",JSON.stringify(out,null,2));
-console.log(`Loaded ${out.length} valid XAUUSD M5 bars from Yahoo`);'
-          else
-            echo "Yahoo unavailable; using existing candle cache if valid."
-            node -e '
-const fs=require("fs");
-if(!fs.existsSync("xauusd_m5.json")) throw new Error("No Yahoo data and no candle cache");
-const bars=JSON.parse(fs.readFileSync("xauusd_m5.json","utf8"));
-if(!Array.isArray(bars)||bars.length<300) throw new Error(`Candle cache invalid or too small: ${bars.length||0}`);
-console.log(`Using cached XAUUSD M5 bars: ${bars.length}`);'
-          fi
+        run: bash -c 'set -euo pipefail; curl -fsS --retry 2 --retry-delay 2 --max-time 25 "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d" -o /tmp/xau.json; node scripts/parse_yahoo_xau.js'
 
       - name: Syntax and dependency checks
         run: npm run check
 
-      - name: Run XAUUSD V4 analysis with optional real-MT5 Order Flow confirmation
+      - name: Run XAUUSD V4 analysis
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node orderflow_gate.js
 
       - name: Commit state and refreshed candles
-        if: ${{ !cancelled() }}
-        shell: bash
+        if: always()
         run: |
-          set -euo pipefail
-          git config user.name "gold-alert-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add xauusd_m5.json state_v2.json
-          if [ -f orderflow.json ]; then git add orderflow.json; fi
-          if git diff --cached --quiet; then
-            echo "No state changes to commit."
-          else
-            git commit -m "update XAUUSD V4 state [skip ci]"
-            git push
-          fi
+          git config user.name 'gold-alert-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add xauusd_m5.json state_v2.json orderflow.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m 'update XAUUSD V4 state [skip ci]'
+          git push || true
