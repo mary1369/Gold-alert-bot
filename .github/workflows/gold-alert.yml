@@ -2,6 +2,8 @@ name: XAU-SMC Gold Alert
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   schedule:
     - cron: '*/5 * * * *'
 
@@ -35,7 +37,12 @@ jobs:
 
       - name: Refresh XAUUSD M5 data
         shell: bash
-        run: bash -c 'set -euo pipefail; curl -fsS --retry 2 --retry-delay 2 --max-time 25 "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d" -o /tmp/xau.json; node scripts/parse_yahoo_xau.js'
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 2 --retry-delay 2 --max-time 25 \
+            'https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d' \
+            -o /tmp/xau.json
+          node scripts/parse_yahoo_xau.js
 
       - name: Syntax and dependency checks
         run: npm run check
@@ -48,9 +55,15 @@ jobs:
 
       - name: Commit state and refreshed candles
         if: always()
+        shell: bash
         run: |
+          set -e
           git config user.name 'gold-alert-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add xauusd_m5.json state_v2.json orderflow.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m 'update XAUUSD V4 state [skip ci]'
-          git push || true
+          if git diff --cached --quiet; then
+            echo 'No state changes to commit.'
+          else
+            git commit -m 'update XAUUSD V4 state [skip ci]'
+            git push
+          fi
