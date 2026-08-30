@@ -81,7 +81,7 @@ NODE
       - name: Syntax and dependency checks
         run: npm run check
 
-      - name: Run XAUUSD V4 analysis with strict real-MT5 Order Flow gate
+      - name: Run XAUUSD V4 analysis with optional real-MT5 Order Flow confirmation
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
