@@ -94,7 +94,8 @@ NODE
           set -euo pipefail
           git config user.name "gold-alert-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add xauusd_m5.json state_v2.json orderflow.json
+          git add xauusd_m5.json state_v2.json
+          if [ -f orderflow.json ]; then git add orderflow.json; fi
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
