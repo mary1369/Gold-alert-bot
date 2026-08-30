@@ -5,7 +5,7 @@ const MAX_AGE_MS = 90 * 1000;
 
 function runAnalysis(reason) {
   if (reason) console.log(`ORDERFLOW: OPTIONAL — ${reason}; running price/SMC analysis without flow confirmation.`);
-  const r = spawnSync(process.execPath, ['server_v4.js'], { stdio: 'inherit', env: process.env });
+  const r = spawnSync(process.execPath, ['v4_runner.js'], { stdio: 'inherit', env: process.env });
   process.exit(r.status == null ? 1 : r.status);
 }
 
@@ -50,5 +50,5 @@ const normalized = {
 fs.writeFileSync(FILE, JSON.stringify(normalized, null, 2));
 console.log(`ORDERFLOW: CONNECTED — fresh real MT5 flow (${Math.round((Date.now() - t) / 1000)}s)`);
 
-const r = spawnSync(process.execPath, ['server_v4.js'], { stdio: 'inherit', env: process.env });
+const r = spawnSync(process.execPath, ['v4_runner.js'], { stdio: 'inherit', env: process.env });
 process.exit(r.status == null ? 1 : r.status);
