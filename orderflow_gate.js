@@ -16,5 +16,5 @@ const imbalance=String(x.imbalance||'').toUpperCase();
 const allowed=new Set(['BUY','SELL','BULLISH','BEARISH','NEUTRAL','BUY_IMBALANCE','SELL_IMBALANCE']);
 if(!allowed.has(imbalance)) stop('invalid imbalance');
 console.log(`ORDERFLOW GATE: PASS — fresh MT5 flow (${Math.round((Date.now()-t)/1000)}s)`);
-const r=spawnSync(process.execPath,['server_v3.js'],{stdio:'inherit',env:process.env});
+const r=spawnSync(process.execPath,['server_v4.js'],{stdio:'inherit',env:process.env});
 process.exit(r.status==null?1:r.status);
