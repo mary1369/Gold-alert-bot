@@ -53,35 +53,35 @@ jobs:
           rm -f /tmp/xau.json
           if curl -fsS --max-time 20 "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d" -o /tmp/xau.json; then
             node <<'NODE'
-            const fs = require('fs');
-            const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
-            const z = j?.chart?.result?.[0];
-            const q = z?.indicators?.quote?.[0];
-            if (!z?.timestamp?.length || !q) throw new Error('Yahoo: missing XAUUSD 5m data');
-            const bars = [];
-            for (let i=0;i<z.timestamp.length;i++) {
-              const o=Number(q.open?.[i]), h=Number(q.high?.[i]), l=Number(q.low?.[i]), c=Number(q.close?.[i]);
-              if ([o,h,l,c].every(Number.isFinite)) bars.push({time:z.timestamp[i]*1000,open:o,high:h,low:l,close:c,volume:Number(q.volume?.[i])||0});
-            }
-            const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1000);
-            if (out.length < 300) throw new Error(`Yahoo: only ${out.length} valid M5 bars`);
-            fs.writeFileSync('xauusd_m5.json',JSON.stringify(out,null,2));
-            console.log(`Loaded ${out.length} closed/available XAUUSD M5 bars from Yahoo`);
-            NODE
+const fs = require('fs');
+const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
+const z = j?.chart?.result?.[0];
+const q = z?.indicators?.quote?.[0];
+if (!z?.timestamp?.length || !q) throw new Error('Yahoo: missing XAUUSD 5m data');
+const bars = [];
+for (let i=0;i<z.timestamp.length;i++) {
+  const o=Number(q.open?.[i]), h=Number(q.high?.[i]), l=Number(q.low?.[i]), c=Number(q.close?.[i]);
+  if ([o,h,l,c].every(Number.isFinite)) bars.push({time:z.timestamp[i]*1000,open:o,high:h,low:l,close:c,volume:Number(q.volume?.[i])||0});
+}
+const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1000);
+if (out.length < 300) throw new Error(`Yahoo: only ${out.length} valid M5 bars`);
+fs.writeFileSync('xauusd_m5.json',JSON.stringify(out,null,2));
+console.log(`Loaded ${out.length} closed/available XAUUSD M5 bars from Yahoo`);
+NODE
           else
             echo "Yahoo unavailable; trying Biquote fallback"
             curl -fsS --max-time 20 "https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=1000" -o /tmp/xau.json
             node <<'NODE'
-            const fs = require('fs');
-            const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
-            if (!Array.isArray(j.bars)) throw new Error('Biquote: missing bars');
-            const bars=j.bars.map(b=>({time:Date.parse(b.openTime),open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:Number(b.tickVolume)||0}))
-              .filter(b=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
-            const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1000);
-            if (out.length < 300) throw new Error(`Biquote: only ${out.length} valid M5 bars`);
-            fs.writeFileSync('xauusd_m5.json',JSON.stringify(out,null,2));
-            console.log(`Loaded ${out.length} XAUUSD M5 bars from Biquote fallback`);
-            NODE
+const fs = require('fs');
+const j = JSON.parse(fs.readFileSync('/tmp/xau.json','utf8'));
+if (!Array.isArray(j.bars)) throw new Error('Biquote: missing bars');
+const bars=j.bars.map(b=>({time:Date.parse(b.openTime),open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:Number(b.tickVolume)||0}))
+  .filter(b=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
+const out=bars.filter((b,i)=>i===0||b.time>bars[i-1].time).slice(-1000);
+if (out.length < 300) throw new Error(`Biquote: only ${out.length} valid M5 bars`);
+fs.writeFileSync('xauusd_m5.json',JSON.stringify(out,null,2));
+console.log(`Loaded ${out.length} XAUUSD M5 bars from Biquote fallback`);
+NODE
           fi
 
       - name: Syntax check V3
