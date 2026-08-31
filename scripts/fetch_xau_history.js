@@ -96,18 +96,11 @@ async function yahooGoldFuturesM5(cache) {
   const result = j?.chart?.result?.[0];
   if (!result) throw new Error(`Yahoo GC=F returned no chart data: ${JSON.stringify(j?.chart?.error || {})}`);
   const q = result?.indicators?.quote?.[0] || {};
-  const rows = (result.timestamp || []).map((t, i) => ({
-    timestamp: Number(t) * 1000,
-    open: q.open?.[i], high: q.high?.[i], low: q.low?.[i], close: q.close?.[i], volume: q.volume?.[i] || 0,
-    isOpen: false
-  }));
+  const rows = (result.timestamp || []).map((t, i) => ({ timestamp: Number(t) * 1000, open: q.open?.[i], high: q.high?.[i], low: q.low?.[i], close: q.close?.[i], volume: q.volume?.[i] || 0, isOpen: false }));
   const futures = closed(normalizeRows(rows));
   console.log(`Yahoo GC=F M5: ${futures.length} closed bars, latest=${futures.length ? futures.at(-1).openTime : 'none'}`);
   if (!futures.length) throw new Error('Yahoo GC=F returned no usable M5 bars');
 
-  // Calibrate the futures series to the persisted XAUUSD spot series at their
-  // common timestamps. This keeps the fallback aligned to the bot's XAUUSD
-  // price scale instead of blindly substituting a different price level.
   const spot = new Map(closed(cache).map((b) => [b.openTime, b.close]));
   const deltas = [];
   for (const b of futures) {
@@ -118,14 +111,7 @@ async function yahooGoldFuturesM5(cache) {
   deltas.sort((a, b) => a - b);
   const basis = deltas[Math.floor(deltas.length / 2)];
   console.log(`Yahoo GC=F calibrated to cached XAUUSD: overlaps=${deltas.length} basis=${basis.toFixed(3)}`);
-
-  return futures.map((b) => ({
-    ...b,
-    open: b.open + basis,
-    high: b.high + basis,
-    low: b.low + basis,
-    close: b.close + basis,
-  }));
+  return futures.map((b) => ({ ...b, open: b.open + basis, high: b.high + basis, low: b.low + basis, close: b.close + basis }));
 }
 
 async function dukascopyM5(days) {
@@ -139,7 +125,7 @@ async function dukascopyM5(days) {
     ignoreFlats: false,
     batchSize: 5,
     pauseBetweenBatchesMs: 1500,
-    retryCount: 2,
+    retryCount: 1,
     pauseBetweenRetriesMs: 3000,
     retryOnEmpty: true,
     failAfterRetryCount: true
@@ -150,7 +136,6 @@ async function dukascopyM5(days) {
 (async () => {
   let bars = loadCache();
 
-  // Primary: live XAUUSD M5 from BiQuote, merged into the persistent cache.
   try {
     const live = await biquoteLatest();
     bars = unique([...bars, ...live]);
@@ -159,7 +144,19 @@ async function dukascopyM5(days) {
     console.log(`BiQuote latest failed: ${e?.stack || e?.message || String(e)}`);
   }
 
-  // Secondary: direct Dukascopy historical XAUUSD.
+  // Fast recovery path: Yahoo GC=F has fresh 5m data when the XAUUSD REST
+  // provider is stale. Calibrate it to the persisted XAUUSD spot history.
+  if (!fresh(bars)) {
+    try {
+      const proxy = await yahooGoldFuturesM5(bars);
+      bars = unique([...bars, ...proxy]);
+      console.log(`Merged calibrated Yahoo GC=F fallback: ${closed(bars).length} closed bars`);
+    } catch (e) {
+      console.log(`Yahoo GC=F fallback failed: ${e?.stack || e?.message || String(e)}`);
+    }
+  }
+
+  // Slow final recovery path: direct Dukascopy historical XAUUSD.
   if (!fresh(bars)) {
     for (const days of [2, 5, 10]) {
       try {
@@ -170,19 +167,6 @@ async function dukascopyM5(days) {
       } catch (e) {
         console.log(`Dukascopy M5 ${days}d failed: ${e?.stack || e?.message || String(e)}`);
       }
-    }
-  }
-
-  // Tertiary: Yahoo COMEX gold futures, calibrated against overlapping cached
-  // XAUUSD bars. This is only a recovery feed; the bot still outputs XAUUSD
-  // prices on the same cached spot scale and refuses uncalibrated substitution.
-  if (!fresh(bars)) {
-    try {
-      const proxy = await yahooGoldFuturesM5(bars);
-      bars = unique([...bars, ...proxy]);
-      console.log(`Merged calibrated Yahoo GC=F fallback: ${closed(bars).length} closed bars`);
-    } catch (e) {
-      console.log(`Yahoo GC=F fallback failed: ${e?.stack || e?.message || String(e)}`);
     }
   }
 
