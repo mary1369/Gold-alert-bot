@@ -1,10 +1,12 @@
 const fs = require('fs');
-const { getHistoricalRates, getRealTimeRates } = require('dukascopy-node');
+const { getHistoricalRates } = require('dukascopy-node');
 
 const DAY = 24 * 60 * 60 * 1000;
+const M5 = 5 * 60 * 1000;
 const NOW = Date.now();
 const MIN_M5 = 1200;
 const MAX_AGE_MS = 20 * 60 * 1000;
+const CACHE_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 
 function normalizeTimestamp(value) {
   const n = Number(value);
@@ -25,100 +27,124 @@ function normalizeRows(rows) {
   }).filter(Boolean);
 }
 
-function usableFresh(bars) {
-  if (bars.length < MIN_M5) return false;
-  const latest = Date.parse(bars.at(-1).openTime);
-  const age = NOW - latest;
-  return age >= 0 && age <= MAX_AGE_MS;
+function loadCachedBars() {
+  try {
+    if (!fs.existsSync('xauusd_m5.json')) return [];
+    const raw = JSON.parse(fs.readFileSync('xauusd_m5.json', 'utf8'));
+    return normalizeRows(raw);
+  } catch (e) {
+    console.log(`Cached XAUUSD history unavailable: ${e.message}`);
+    return [];
+  }
 }
 
-async function fetchHistoricalWindow(days, batchSize) {
+function uniqueSorted(bars) {
+  const map = new Map();
+  for (const b of bars || []) map.set(b.openTime, b);
+  return [...map.values()].sort((a, b) => Date.parse(a.openTime) - Date.parse(b.openTime));
+}
+
+function latestTime(bars) {
+  return bars.length ? Date.parse(bars.at(-1).openTime) : NaN;
+}
+
+function isFresh(bars) {
+  const latest = latestTime(bars);
+  const age = NOW - latest;
+  return bars.length >= MIN_M5 && age >= 0 && age <= MAX_AGE_MS;
+}
+
+async function fetchHistoricalM5(days, batchSize) {
   const from = new Date(NOW - days * DAY);
-  const to = new Date(NOW);
+  const to = new Date(NOW - 5 * 60 * 1000);
   const data = await getHistoricalRates({
     instrument: 'xauusd', dates: { from, to }, timeframe: 'm5', priceType: 'bid',
-    format: 'array', volumes: true, ignoreFlats: true, batchSize,
-    pauseBetweenBatchesMs: 800, retryCount: 3, pauseBetweenRetriesMs: 1000,
+    format: 'array', volumes: true, ignoreFlats: false, batchSize,
+    pauseBetweenBatchesMs: 1500, retryCount: 2, pauseBetweenRetriesMs: 1500,
     retryOnEmpty: true
   });
   return normalizeRows(Array.isArray(data) ? data : data?.data);
 }
 
-async function fetchDukascopy() {
-  for (const [days, batch] of [[7, 3], [3, 2], [2, 1]]) {
-    try {
-      const bars = await fetchHistoricalWindow(days, batch);
-      console.log(`Dukascopy historical attempt ${days}d/${batch}batch: ${bars.length} bars`);
-      if (bars.length >= MIN_M5 || usableFresh(bars)) return bars;
-    } catch (e) {
-      console.log(`Dukascopy historical attempt ${days}d failed: ${e.message}`);
-    }
-  }
-  return [];
+async function fetchRecentHistoricalTicks(hours = 6) {
+  const from = new Date(NOW - hours * 60 * 60 * 1000);
+  const to = new Date(NOW);
+  const data = await getHistoricalRates({
+    instrument: 'xauusd', dates: { from, to }, timeframe: 'tick', priceType: 'bid',
+    format: 'array', batchSize: 1, pauseBetweenBatchesMs: 2000,
+    retryCount: 3, pauseBetweenRetriesMs: 2000, retryOnEmpty: true
+  });
+  return Array.isArray(data) ? data : data?.data;
 }
 
 function ticksToM5(ticks) {
   const map = new Map();
   for (const t of ticks || []) {
     const ts = normalizeTimestamp(t?.timestamp ?? t?.time ?? t?.[0]);
-    const price = Number(t?.bidPrice ?? t?.bid ?? t?.price ?? t?.[2]);
-    if (!Number.isFinite(ts) || !Number.isFinite(price)) continue;
-    const bucket = Math.floor(ts / 300000) * 300000;
+    const bid = Number(t?.bidPrice ?? t?.bid ?? t?.[2]);
+    if (!Number.isFinite(ts) || !Number.isFinite(bid) || bid <= 0) continue;
+    const bucket = Math.floor(ts / M5) * M5;
     let c = map.get(bucket);
-    if (!c) c = { openTime: new Date(bucket).toISOString(), open: price, high: price, low: price, close: price, volume: 0, isOpen: false };
-    c.high = Math.max(c.high, price);
-    c.low = Math.min(c.low, price);
-    c.close = price;
+    if (!c) c = { openTime: new Date(bucket).toISOString(), open: bid, high: bid, low: bid, close: bid, volume: 0, isOpen: false };
+    c.high = Math.max(c.high, bid);
+    c.low = Math.min(c.low, bid);
+    c.close = bid;
     c.volume += 1;
     map.set(bucket, c);
   }
-  return [...map.values()].sort((a,b) => Date.parse(a.openTime) - Date.parse(b.openTime));
-}
-
-async function fetchRealtimeTicks() {
-  const data = await getRealTimeRates({ instrument: 'xauusd', timeframe: 'tick', format: 'json' });
-  const ticks = Array.isArray(data) ? data : data?.data;
-  if (!Array.isArray(ticks) || !ticks.length) throw new Error('Dukascopy real-time returned no ticks');
-  return ticksToM5(ticks);
+  return [...map.values()].sort((a, b) => Date.parse(a.openTime) - Date.parse(b.openTime));
 }
 
 (async () => {
+  let cached = loadCachedBars();
   let bars = [];
-  try {
-    bars = await fetchDukascopy();
-    console.log(`Dukascopy returned ${bars.length} usable M5 bars`);
-    if (!usableFresh(bars)) {
-      const latest = bars.length ? Date.parse(bars.at(-1).openTime) : NaN;
-      console.log(`Dukascopy historical stale: latest=${Number.isFinite(latest) ? new Date(latest).toISOString() : 'none'}`);
-    }
-  } catch (e) {
-    console.log(`Dukascopy historical fetch failed: ${e.message}`);
+  console.log(`Cached XAUUSD M5 bars: ${cached.length}`);
+  if (cached.length) {
+    const age = Math.round((NOW - latestTime(cached)) / 60000);
+    console.log(`Cached latest candle: ${new Date(latestTime(cached)).toISOString()} | age=${age}m`);
   }
 
-  if (!usableFresh(bars)) {
-    console.log('Trying Dukascopy real-time tick fallback...');
+  // Primary source: fresh Dukascopy historical M5.
+  for (const [days, batch] of [[2, 1], [1, 1], [0.5, 1]]) {
     try {
-      const realtime = await fetchRealtimeTicks();
-      console.log(`Dukascopy real-time produced ${realtime.length} current M5 buckets`);
-      if (realtime.length) {
-        const firstRealtime = Date.parse(realtime[0].openTime);
-        bars = [...bars.filter(b => Date.parse(b.openTime) < firstRealtime), ...realtime];
+      const fresh = uniqueSorted(await fetchHistoricalM5(days, batch));
+      console.log(`Dukascopy historical ${days}d returned ${fresh.length} M5 bars`);
+      if (fresh.length >= MIN_M5 && isFresh(fresh)) {
+        bars = fresh;
+        break;
       }
+      if (fresh.length) bars = uniqueSorted([...bars, ...fresh]);
     } catch (e) {
-      console.log(`Dukascopy real-time fallback failed: ${e.message}`);
+      console.log(`Dukascopy historical ${days}d failed: ${e.message}`);
     }
   }
 
-  const unique = new Map();
-  for (const b of bars) unique.set(b.openTime, b);
-  const merged = [...unique.values()].sort((a, b) => Date.parse(a.openTime) - Date.parse(b.openTime));
-  if (merged.length < MIN_M5) throw new Error(`Insufficient XAUUSD M5 history: ${merged.length}`);
+  // If the historical M5 endpoint is temporarily empty, keep cached history and
+  // refresh only the recent edge from historical tick data. This avoids relying
+  // on a desktop/MT5 Order Flow server and avoids inventing a candle from one quote.
+  if (!isFresh(bars)) {
+    console.log('Historical M5 is not fresh; refreshing recent edge from Dukascopy historical ticks...');
+    try {
+      const ticks = await fetchRecentHistoricalTicks(6);
+      const recent = ticksToM5(ticks);
+      console.log(`Historical tick refresh produced ${recent.length} M5 buckets`);
+      if (recent.length) bars = uniqueSorted([...cached, ...bars, ...recent]);
+    } catch (e) {
+      console.log(`Historical tick refresh failed: ${e.message}`);
+      bars = uniqueSorted([...cached, ...bars]);
+    }
+  }
 
-  const latest = Date.parse(merged.at(-1).openTime);
+  bars = uniqueSorted(bars);
+  if (bars.length < MIN_M5) throw new Error(`Insufficient XAUUSD M5 history: ${bars.length}`);
+
+  const latest = latestTime(bars);
   const age = NOW - latest;
   console.log(`Final XAUUSD M5 candle UTC: ${new Date(latest).toISOString()} | age=${Math.round(age / 60000)}m`);
-  if (age < 0 || age > MAX_AGE_MS) throw new Error(`No fresh XAUUSD M5 feed: latest=${new Date(latest).toISOString()} age=${Math.round(age / 60000)}m`);
+  if (age < 0 || age > MAX_AGE_MS) {
+    throw new Error(`No fresh XAUUSD M5 feed: latest=${new Date(latest).toISOString()} age=${Math.round(age / 60000)}m`);
+  }
 
-  fs.writeFileSync('/tmp/xau.json', JSON.stringify({ symbol: 'XAUUSD', interval: '5m', bars: merged }));
-  console.log(`Published ${merged.length} unique fresh XAUUSD M5 bars`);
+  fs.writeFileSync('/tmp/xau.json', JSON.stringify({ symbol: 'XAUUSD', interval: '5m', bars }));
+  console.log(`Published ${bars.length} unique fresh XAUUSD M5 bars`);
 })();
