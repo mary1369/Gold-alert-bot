@@ -57,7 +57,7 @@ jobs:
             echo 'Unable to obtain a fresh XAUUSD M5 feed. No signal will be generated.'
             exit 1
           fi
-          node -e 'const x=require("./xauusd_m5.json"); if(!Array.isArray(x)||x.length<240) throw new Error(`Invalid M5 history: ${x?.length||0}`); const age=Date.now()-x.at(-1).time; if(age<0||age>20*60*1000) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m`); console.log(`Validated ${x.length} M5 bars; latest=${new Date(x.at(-1).time).toISOString()}`)'
+          node -e 'const x=require("./xauusd_m5.json"); if(!Array.isArray(x)||x.length<1200) throw new Error(`Invalid M5 history: ${x?.length||0}`); const age=Date.now()-x.at(-1).time; if(age<0||age>20*60*1000) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m`); console.log(`Validated ${x.length} M5 bars; latest=${new Date(x.at(-1).time).toISOString()}`)'
 
       - name: Fetch fresh MT5 Order Flow (optional)
         env:
