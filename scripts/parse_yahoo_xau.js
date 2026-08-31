@@ -16,11 +16,17 @@ const bars = raw
   .filter(b => Number.isFinite(b.time) && [b.open, b.high, b.low, b.close].every(Number.isFinite))
   .sort((a, b) => a.time - b.time);
 
-const out = bars.filter((b, i) => i === 0 || b.time > bars[i - 1].time).slice(-1200);
+const out = bars.filter((b, i) => i === 0 || b.time > bars[i - 1].time);
 
-// V4 requires at least 200 closed M5 candles for its multi-timeframe calculations.
-// biquote currently supplies 288 valid closed M5 candles, which is sufficient.
-if (out.length < 200) throw new Error(`biquote: only ${out.length} valid closed M5 bars (minimum 200)`);
+// V4 needs enough M5 history to build its higher timeframes reliably.
+// 50 H1 candles require about 600 M5 bars; 20 H4 candles require about 960.
+// Keep a wider buffer so gaps/weekends do not silently starve the engine.
+const MIN_M5 = 1200;
+if (out.length < MIN_M5) {
+  throw new Error(`Insufficient closed XAUUSD M5 history: ${out.length} bars (minimum ${MIN_M5})`);
+}
 
-fs.writeFileSync('xauusd_m5.json', JSON.stringify(out, null, 2));
-console.log(`Loaded ${out.length} valid closed XAUUSD M5 bars from biquote`);
+// Keep the newest history while retaining enough bars for H1/H4 structure.
+const trimmed = out.slice(-3000);
+fs.writeFileSync('xauusd_m5.json', JSON.stringify(trimmed, null, 2));
+console.log(`Loaded ${trimmed.length} unique closed XAUUSD M5 bars`);
