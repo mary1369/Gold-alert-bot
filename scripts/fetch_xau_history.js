@@ -6,6 +6,7 @@ const M5 = 5 * 60 * 1000;
 const NOW = Date.now();
 const MIN_M5 = 1200;
 const MAX_AGE_MS = 20 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 12000;
 
 function ts(v) {
   if (typeof v === 'string') {
@@ -62,11 +63,22 @@ function loadCache() {
   }
 }
 
+async function fetchText(url, headers = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { headers, signal: controller.signal });
+    const text = await r.text();
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`);
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function biquoteLatest() {
   const url = 'https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=1000';
-  const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Gold-alert-bot/1.0' } });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`BiQuote latest HTTP ${r.status}: ${text.slice(0, 200)}`);
+  const text = await fetchText(url, { Accept: 'application/json', 'User-Agent': 'Gold-alert-bot/1.0' });
   let j;
   try { j = JSON.parse(text); } catch (e) { throw new Error(`BiQuote latest invalid JSON: ${e.message}`); }
   const rows = Array.isArray(j) ? j : (j?.bars || j?.data || j?.candles || j?.result || []);
@@ -74,6 +86,46 @@ async function biquoteLatest() {
   console.log(`BiQuote latest: raw=${rows.length || 0} parsed=${bars.length} closed=${closed(bars).length} latest=${bars.length ? bars.at(-1).openTime : 'none'}`);
   if (!bars.length) throw new Error('BiQuote returned no XAUUSD M5 bars');
   return bars;
+}
+
+async function yahooGoldFuturesM5(cache) {
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=5m&includePrePost=true&events=div%2Csplits';
+  const text = await fetchText(url, { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 Gold-alert-bot/1.0' });
+  let j;
+  try { j = JSON.parse(text); } catch (e) { throw new Error(`Yahoo GC=F invalid JSON: ${e.message}`); }
+  const result = j?.chart?.result?.[0];
+  if (!result) throw new Error(`Yahoo GC=F returned no chart data: ${JSON.stringify(j?.chart?.error || {})}`);
+  const q = result?.indicators?.quote?.[0] || {};
+  const rows = (result.timestamp || []).map((t, i) => ({
+    timestamp: Number(t) * 1000,
+    open: q.open?.[i], high: q.high?.[i], low: q.low?.[i], close: q.close?.[i], volume: q.volume?.[i] || 0,
+    isOpen: false
+  }));
+  const futures = closed(normalizeRows(rows));
+  console.log(`Yahoo GC=F M5: ${futures.length} closed bars, latest=${futures.length ? futures.at(-1).openTime : 'none'}`);
+  if (!futures.length) throw new Error('Yahoo GC=F returned no usable M5 bars');
+
+  // Calibrate the futures series to the persisted XAUUSD spot series at their
+  // common timestamps. This keeps the fallback aligned to the bot's XAUUSD
+  // price scale instead of blindly substituting a different price level.
+  const spot = new Map(closed(cache).map((b) => [b.openTime, b.close]));
+  const deltas = [];
+  for (const b of futures) {
+    const s = spot.get(b.openTime);
+    if (Number.isFinite(s)) deltas.push(s - b.close);
+  }
+  if (deltas.length < 10) throw new Error(`Yahoo GC=F calibration unavailable: only ${deltas.length} overlapping XAUUSD bars`);
+  deltas.sort((a, b) => a - b);
+  const basis = deltas[Math.floor(deltas.length / 2)];
+  console.log(`Yahoo GC=F calibrated to cached XAUUSD: overlaps=${deltas.length} basis=${basis.toFixed(3)}`);
+
+  return futures.map((b) => ({
+    ...b,
+    open: b.open + basis,
+    high: b.high + basis,
+    low: b.low + basis,
+    close: b.close + basis,
+  }));
 }
 
 async function dukascopyM5(days) {
@@ -85,12 +137,12 @@ async function dukascopyM5(days) {
     format: 'array',
     volumes: true,
     ignoreFlats: false,
-    batchSize: 1,
-    pauseBetweenBatchesMs: 7000,
-    retryCount: 1,
-    pauseBetweenRetriesMs: 10000,
+    batchSize: 5,
+    pauseBetweenBatchesMs: 1500,
+    retryCount: 2,
+    pauseBetweenRetriesMs: 3000,
     retryOnEmpty: true,
-    failAfterRetryCount: 1
+    failAfterRetryCount: true
   });
   return normalizeRows(Array.isArray(data) ? data : data?.data);
 }
@@ -98,20 +150,16 @@ async function dukascopyM5(days) {
 (async () => {
   let bars = loadCache();
 
-  // The repository cache is intentionally part of the feed pipeline.  BiQuote
-  // reliably provides the current M5 window, while the cache preserves older
-  // closed bars between scheduled GitHub Actions runs.  This avoids depending
-  // on an unstable third-party historical endpoint for every 5-minute run.
+  // Primary: live XAUUSD M5 from BiQuote, merged into the persistent cache.
   try {
     const live = await biquoteLatest();
     bars = unique([...bars, ...live]);
-    console.log(`Merged live BiQuote data with cache: ${closed(bars).length} closed bars`);
+    console.log(`Merged BiQuote with cache: ${closed(bars).length} closed bars`);
   } catch (e) {
     console.log(`BiQuote latest failed: ${e?.stack || e?.message || String(e)}`);
   }
 
-  // Only use Dukascopy when the persisted cache + live refresh cannot satisfy
-  // the minimum history.  It is never required for the normal path.
+  // Secondary: direct Dukascopy historical XAUUSD.
   if (!fresh(bars)) {
     for (const days of [2, 5, 10]) {
       try {
@@ -122,6 +170,19 @@ async function dukascopyM5(days) {
       } catch (e) {
         console.log(`Dukascopy M5 ${days}d failed: ${e?.stack || e?.message || String(e)}`);
       }
+    }
+  }
+
+  // Tertiary: Yahoo COMEX gold futures, calibrated against overlapping cached
+  // XAUUSD bars. This is only a recovery feed; the bot still outputs XAUUSD
+  // prices on the same cached spot scale and refuses uncalibrated substitution.
+  if (!fresh(bars)) {
+    try {
+      const proxy = await yahooGoldFuturesM5(bars);
+      bars = unique([...bars, ...proxy]);
+      console.log(`Merged calibrated Yahoo GC=F fallback: ${closed(bars).length} closed bars`);
+    } catch (e) {
+      console.log(`Yahoo GC=F fallback failed: ${e?.stack || e?.message || String(e)}`);
     }
   }
 
