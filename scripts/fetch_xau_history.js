@@ -1,6 +1,6 @@
 const fs=require('fs');
 const {getHistoricalRates}=require('dukascopy-node');
-const DAY=86400000,M5=300000,NOW=Date.now(),MIN_M5=1200,MAX_AGE_MS=20*60000;
+const DAY=86400000,M5=300000,NOW=Date.now(),MIN_M5=240,MAX_AGE_MS=20*60000;
 function ts(v){if(typeof v==='string'){const d=Date.parse(v);if(Number.isFinite(d))return d;}const n=Number(v);return Number.isFinite(n)?(n<1e11?n*1000:n):NaN;}
 function norm(rows){return(rows||[]).map(r=>{const t=ts(r?.timestamp??r?.time??r?.openTime??r?.[0]);const o=Number(r?.open??r?.[1]),h=Number(r?.high??r?.[2]),l=Number(r?.low??r?.[3]),c=Number(r?.close??r?.[4]),v=Number(r?.volume??r?.tickVolume??r?.[5]??0)||0;const isOpen=Boolean(r?.isOpen);return Number.isFinite(t)&&[o,h,l,c].every(Number.isFinite)?{openTime:new Date(t).toISOString(),open:o,high:h,low:l,close:c,volume:v,isOpen}:null}).filter(Boolean)}
 function unique(a){const m=new Map();for(const b of a||[])m.set(b.openTime,b);return[...m.values()].sort((x,y)=>Date.parse(x.openTime)-Date.parse(y.openTime))}
