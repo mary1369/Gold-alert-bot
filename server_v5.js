@@ -25,7 +25,6 @@ function agg(a, minutes) {
 function ema(a, len) { if (a.length < len) return null; let e=a[0].close,k=2/(len+1); for(let i=1;i<a.length;i++) e+=(a[i].close-e)*k; return e; }
 function atr(a, len=14) { if(a.length<len+1)return null; const tr=[]; for(let i=1;i<a.length;i++) tr.push(Math.max(a[i].high-a[i].low,Math.abs(a[i].high-a[i-1].close),Math.abs(a[i].low-a[i-1].close))); return tr.slice(-len).reduce((s,x)=>s+x,0)/len; }
 function trend(a) { const e20=ema(a,20),e50=ema(a,50),c=a.at(-1)?.close; if(!e20||!e50||c==null)return'UNKNOWN'; if(c>e20&&e20>e50)return'BULLISH'; if(c<e20&&e20<e50)return'BEARISH'; return 'RANGE'; }
-function levels(a) { const w=a.slice(-20); return {hi:Math.max(...w.map(x=>x.high)),lo:Math.min(...w.map(x=>x.low))}; }
 function signalAt(idx) {
   const a=closed.slice(0,idx+1); if(a.length<100)return null;
   const m15=agg(a,15),h1=agg(a,60),h4=agg(a,240); if(h1.length<50||h4.length<20)return null;
@@ -46,7 +45,6 @@ function signalAt(idx) {
   return {direction:dir,entry,sl,tp1:dir==='BUY'?entry+risk:entry-risk,tp2:dir==='BUY'?entry+risk*2:entry-risk*2,score,candleTime:c.time,h4:t4,h1:t1,m15:t15,m5:bullishBreak?'BULLISH':bearishBreak?'BEARISH':'RANGE',breakout:dir==='BUY'?bullishBreak:bearishBreak,sweep:dir==='BUY'?sweepBuy:sweepSell,displacement,atr:atrv};
 }
 
-// Scan the recent closed candles so a valid setup is not missed between 5-min runs.
 let found=null;
 for(let i=Math.max(100,closed.length-36);i<closed.length;i++){const s=signalAt(i);if(s)found=s;}
 console.log(`V5 SCAN: ${Math.min(36,closed.length-100)} recent closed M5 candles`);
@@ -54,10 +52,11 @@ if(!found){console.log('NO SIGNAL: no confirmed trend-break/sweep setup in recen
 console.log('SIGNAL CANDIDATE',JSON.stringify(found));
 const state=load(STATE,{}), key=`${found.direction}|${found.candleTime}|${found.entry.toFixed(2)}|${found.sl.toFixed(2)}`;
 if(state.lastSignalKey===key){console.log('DUPLICATE SIGNAL — not sent');process.exit(0);}
-
+function iranTime(ts){return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(ts*1000));}
 async function send(s){
   if(!TOKEN||!CHAT)throw Error('Telegram secrets missing');
-  const text=`${s.direction==='BUY'?'🟢':'🔴'} XAUUSD ${s.direction} V5\n\nEntry: ${s.entry.toFixed(2)}\nSL: ${s.sl.toFixed(2)}\nTP1: ${s.tp1.toFixed(2)}\nTP2: ${s.tp2.toFixed(2)}\n\nH4 ${s.h4} | H1 ${s.h1} | M15 ${s.m15}\nBreakout ${s.breakout?'✅':'❌'} | Sweep ${s.sweep?'✅':'❌'} | Displacement ${s.displacement?'✅':'❌'}\nScore ${s.score} | ATR ${s.atr.toFixed(2)}\n\n⚠️ Risk management mandatory.`;
+  const strength=s.score>=9?'🟢 STRONG':'🟡 VALID';
+  const text=`${s.direction==='BUY'?'🟢':'🔴'} XAUUSD ${s.direction} V5\n\n${strength} | Score ${s.score}/10\n🕐 Signal: ${iranTime(s.candleTime)} (Iran)\n\nEntry: ${s.entry.toFixed(2)}\nSL: ${s.sl.toFixed(2)}\nTP1: ${s.tp1.toFixed(2)}\nTP2: ${s.tp2.toFixed(2)} (Extended Target)\n\nH4 ${s.h4} | H1 ${s.h1} | M15 ${s.m15}\nBreakout ${s.breakout?'✅':'❌'} | Sweep ${s.sweep?'✅':'❌'} | Displacement ${s.displacement?'✅':'❌'}\nATR ${s.atr.toFixed(2)}\n\n⚠️ TP2 is a target, not a guarantee. Risk management mandatory.`;
   const r=await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:CHAT,text})});
   if(!r.ok)throw Error(`Telegram HTTP ${r.status}: ${await r.text()}`);
 }
