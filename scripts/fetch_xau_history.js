@@ -89,12 +89,25 @@ async function biquoteLatest() {
 }
 
 async function yahooGoldFuturesM5(cache) {
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=5m&includePrePost=true&events=div%2Csplits';
-  const text = await fetchText(url, { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 Gold-alert-bot/1.0' });
-  let j;
-  try { j = JSON.parse(text); } catch (e) { throw new Error(`Yahoo GC=F invalid JSON: ${e.message}`); }
-  const result = j?.chart?.result?.[0];
-  if (!result) throw new Error(`Yahoo GC=F returned no chart data: ${JSON.stringify(j?.chart?.error || {})}`);
+  const urls = [
+    'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=5m&includePrePost=true&events=div%2Csplits',
+    'https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=5m&includePrePost=true&events=div%2Csplits'
+  ];
+  let lastError;
+  let result;
+  for (const url of urls) {
+    try {
+      const text = await fetchText(url, { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 Gold-alert-bot/1.0' });
+      const j = JSON.parse(text);
+      result = j?.chart?.result?.[0];
+      if (result) break;
+      lastError = new Error(`Yahoo chart returned no result: ${JSON.stringify(j?.chart?.error || {})}`);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (!result) throw new Error(`Yahoo GC=F unavailable: ${lastError?.message || lastError}`);
+
   const q = result?.indicators?.quote?.[0] || {};
   const rows = (result.timestamp || []).map((t, i) => ({ timestamp: Number(t) * 1000, open: q.open?.[i], high: q.high?.[i], low: q.low?.[i], close: q.close?.[i], volume: q.volume?.[i] || 0, isOpen: false }));
   const futures = closed(normalizeRows(rows));
@@ -112,10 +125,16 @@ async function yahooGoldFuturesM5(cache) {
     }
     if (best && Number.isFinite(best.close)) deltas.push(best.close - b.close);
   }
-  if (deltas.length < 10) throw new Error(`Yahoo GC=F calibration unavailable: only ${deltas.length} nearby XAUUSD overlaps`);
-  deltas.sort((a, b) => a - b);
-  const basis = deltas[Math.floor(deltas.length / 2)];
-  console.log(`Yahoo GC=F calibrated to cached XAUUSD: overlaps=${deltas.length} basis=${basis.toFixed(3)}`);
+
+  let basis = 0;
+  if (deltas.length >= 10) {
+    deltas.sort((a, b) => a - b);
+    basis = deltas[Math.floor(deltas.length / 2)];
+    console.log(`Yahoo GC=F calibrated to cached XAUUSD: overlaps=${deltas.length} basis=${basis.toFixed(3)}`);
+  } else {
+    console.log(`Yahoo GC=F calibration unavailable (${deltas.length} overlaps); using futures scale as emergency market-data fallback.`);
+  }
+
   return futures.map((b) => ({ ...b, open: b.open + basis, high: b.high + basis, low: b.low + basis, close: b.close + basis }));
 }
 
@@ -153,7 +172,7 @@ async function dukascopyM5(days) {
     try {
       const proxy = await yahooGoldFuturesM5(bars);
       bars = unique([...bars, ...proxy]);
-      console.log(`Merged calibrated Yahoo GC=F fallback: ${closed(bars).length} closed bars`);
+      console.log(`Merged Yahoo GC=F fallback: ${closed(bars).length} closed bars`);
     } catch (e) {
       console.log(`Yahoo GC=F fallback failed: ${e?.stack || e?.message || String(e)}`);
     }
