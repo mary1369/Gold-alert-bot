@@ -49,8 +49,9 @@ function fresh(rows) {
   return age >= 0 && age <= MAX_AGE_MS;
 }
 
-async function biquotePage(to, label) {
+async function biquotePage(from, to, label) {
   const p = new URLSearchParams({ interval: '5m', limit: '1000' });
+  if (Number.isFinite(from)) p.set('from', new Date(from).toISOString());
   if (Number.isFinite(to)) p.set('to', new Date(to).toISOString());
   const url = `https://biquote.io/api/XAUUSD/ohlc?${p}`;
   const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Gold-alert-bot/1.0' } });
@@ -67,16 +68,23 @@ async function biquotePage(to, label) {
 
 async function biquoteM5() {
   let all = [];
-  let to = NaN;
-  for (let page = 0; page < 4 && closed(all).length < MIN_M5; page++) {
-    const got = await biquotePage(to, `page-${page + 1}`);
+  let to = NOW;
+  const WINDOW = 5 * DAY;
+
+  // BiQuote requires an explicit date range for older M5 history. Walk
+  // backwards in bounded windows; each window may return up to 1000 bars.
+  for (let page = 0; page < 10 && closed(all).length < MIN_M5; page++) {
+    const from = to - WINDOW;
+    const got = await biquotePage(from, to, `page-${page + 1}`);
     const before = all.length;
     all = unique([...all, ...got]);
     if (all.length === before) break;
+
     const oldest = Date.parse(all[0].openTime);
-    if (!Number.isFinite(oldest)) break;
+    if (!Number.isFinite(oldest) || oldest >= to) break;
     to = oldest - M5;
   }
+
   all = closed(all);
   if (!fresh(all)) {
     const latest = all.length ? new Date(Date.parse(all.at(-1).openTime)).toISOString() : 'none';
