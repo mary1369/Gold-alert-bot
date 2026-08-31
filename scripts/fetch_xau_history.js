@@ -101,13 +101,18 @@ async function yahooGoldFuturesM5(cache) {
   console.log(`Yahoo GC=F M5: ${futures.length} closed bars, latest=${futures.length ? futures.at(-1).openTime : 'none'}`);
   if (!futures.length) throw new Error('Yahoo GC=F returned no usable M5 bars');
 
-  const spot = new Map(closed(cache).map((b) => [b.openTime, b.close]));
+  const spot = closed(cache).map((b) => ({ t: Date.parse(b.openTime), close: b.close }));
   const deltas = [];
   for (const b of futures) {
-    const s = spot.get(b.openTime);
-    if (Number.isFinite(s)) deltas.push(s - b.close);
+    const t = Date.parse(b.openTime);
+    let best = null;
+    for (const s of spot) {
+      const distance = Math.abs(s.t - t);
+      if (distance <= 10 * M5 && (!best || distance < best.distance)) best = { distance, close: s.close };
+    }
+    if (best && Number.isFinite(best.close)) deltas.push(best.close - b.close);
   }
-  if (deltas.length < 10) throw new Error(`Yahoo GC=F calibration unavailable: only ${deltas.length} overlapping XAUUSD bars`);
+  if (deltas.length < 10) throw new Error(`Yahoo GC=F calibration unavailable: only ${deltas.length} nearby XAUUSD overlaps`);
   deltas.sort((a, b) => a - b);
   const basis = deltas[Math.floor(deltas.length / 2)];
   console.log(`Yahoo GC=F calibrated to cached XAUUSD: overlaps=${deltas.length} basis=${basis.toFixed(3)}`);
@@ -144,8 +149,6 @@ async function dukascopyM5(days) {
     console.log(`BiQuote latest failed: ${e?.stack || e?.message || String(e)}`);
   }
 
-  // Fast recovery path: Yahoo GC=F has fresh 5m data when the XAUUSD REST
-  // provider is stale. Calibrate it to the persisted XAUUSD spot history.
   if (!fresh(bars)) {
     try {
       const proxy = await yahooGoldFuturesM5(bars);
@@ -156,7 +159,6 @@ async function dukascopyM5(days) {
     }
   }
 
-  // Slow final recovery path: direct Dukascopy historical XAUUSD.
   if (!fresh(bars)) {
     for (const days of [2, 5, 10]) {
       try {
