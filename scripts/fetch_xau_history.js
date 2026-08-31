@@ -1,14 +1,54 @@
-const fs=require('fs');
-const {getHistoricalRates}=require('dukascopy-node');
-const DAY=86400000,M5=300000,NOW=Date.now(),MIN_M5=1200,MAX_AGE_MS=20*60000;
-function ts(v){if(typeof v==='string'){const d=Date.parse(v);if(Number.isFinite(d))return d;}const n=Number(v);return Number.isFinite(n)?(n<1e11?n*1000:n):NaN;}
-function boolOpen(v){if(v===true||v===1)return true;if(typeof v==='string')return ['true','1','yes','open'].includes(v.trim().toLowerCase());return false;}
-function norm(rows){return(rows||[]).map(r=>{const t=ts(r?.timestamp??r?.time??r?.openTime??r?.[0]);const o=Number(r?.open??r?.[1]),h=Number(r?.high??r?.[2]),l=Number(r?.low??r?.[3]),c=Number(r?.close??r?.[4]),v=Number(r?.volume??r?.tickVolume??r?.[5]??0)||0;const isOpen=boolOpen(r?.isOpen);return Number.isFinite(t)&&[o,h,l,c].every(Number.isFinite)?{openTime:new Date(t).toISOString(),open:o,high:h,low:l,close:c,volume:v,isOpen}:null}).filter(Boolean)}
-function unique(a){const m=new Map();for(const b of a||[])m.set(b.openTime,b);return[...m.values()].sort((x,y)=>Date.parse(x.openTime)-Date.parse(y.openTime))}
-function latest(a){return a.length?Date.parse(a.at(-1).openTime):NaN}
-function closedBars(a){const cutoff=Math.floor(NOW/M5)*M5-M5;return unique((a||[]).filter(b=>Date.parse(b.openTime)<=cutoff&&!b.isOpen));}
-function fresh(a){const x=closedBars(a);const age=NOW-latest(x);return x.length>=MIN_M5&&age>=0&&age<=MAX_AGE_MS}
-async function biquoteWindow(from,to,label){const p=new URLSearchParams({interval:'5m',limit:'1000',from:new Date(from).toISOString(),to:new Date(to).toISOString()});const u=`https://biquote.io/api/XAUUSD/ohlc?${p}`;const r=await fetch(u,{headers:{Accept:'application/json','User-Agent':'Gold-alert-bot/1.0'}});const text=await r.text();if(!r.ok)throw new Error(`BiQuote ${label} HTTP ${r.status}: ${text.slice(0,180)}`);let j;try{j=JSON.parse(text)}catch(e){throw new Error(`BiQuote ${label} invalid JSON: ${e.message}`)}const rows=Array.isArray(j)?j:(j?.bars||j?.data||j?.candles||j?.result||[]);const bars=norm(rows),closed=closedBars(bars);console.log(`BiQuote ${label}: raw=${rows.length||0} parsed=${bars.length} closed=${closed.length} latest=${closed.length?closed.at(-1).openTime:'none'}`);return bars}
-async function biquoteM5(){let all=[];for(let day=0;day<10&&closedBars(all).length<MIN_M5;day++){const to=NOW-day*DAY-M5,from=to-DAY;try{const got=await biquoteWindow(from,to,`day-${day}`);all=unique([...all,...got]);}catch(e){console.log(`BiQuote day-${day} failed: ${e?.stack||e?.message||String(e)}`)}}all=closedBars(all);if(!fresh(all))throw new Error(`BiQuote M5 insufficient/freshness failure: ${all.length} closed bars, latest=${Number.isFinite(latest(all))?new Date(latest(all)).toISOString():'none'}`);return all}
-async function dukM5(days){const data=await getHistoricalRates({instrument:'xauusd',dates:{from:new Date(NOW-days*DAY),to:new Date(NOW-M5)},timeframe:'m5',priceType:'bid',format:'array',volumes:true,ignoreFlats:false,batchSize:1,pauseBetweenBatchesMs:7000,retryCount:1,pauseBetweenRetriesMs:10000,retryOnEmpty:true,failAfterRetryCount:1});return norm(Array.isArray(data)?data:data?.data)}
-(async()=>{let bars=[];const providers=[['BiQuote M5',()=>biquoteM5()],['Dukascopy M5 2d',()=>dukM5(2)],['Dukascopy M5 1d',()=>dukM5(1)],['Dukascopy M5 0.5d',()=>dukM5(0.5)]];for(const [name,fn] of providers){try{const got=closedBars(await fn());console.log(`${name}: ${got.length}`);bars=closedBars([...bars,...got]);if(fresh(bars))break}catch(e){console.log(`${name} failed: ${e?.stack||e?.message||String(e)}`)}}bars=closedBars(bars);if(!fresh(bars))throw new Error(`No fresh XAUUSD M5 feed: bars=${bars.length}, latest=${Number.isFinite(latest(bars))?new Date(latest(bars)).toISOString():'none'}`);const out=bars.slice(-3000);fs.writeFileSync('/tmp/xau.json',JSON.stringify({symbol:'XAUUSD',interval:'5m',bars:out}));console.log(`Published ${out.length} unique fresh closed XAUUSD M5 bars`);})().catch(e=>{console.error(e.stack||e.message);process.exit(1)});
+const fs = require('fs');
+const { getHistoricalRates } = require('dukascopy-node');
+
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = Date.now();
+const MIN_M5 = 1200;
+
+function normalizeRows(rows) {
+  return (rows || []).map((r) => {
+    const ts = Number(r?.timestamp ?? r?.time ?? r?.[0]);
+    const open = Number(r?.open ?? r?.[1]);
+    const high = Number(r?.high ?? r?.[2]);
+    const low = Number(r?.low ?? r?.[3]);
+    const close = Number(r?.close ?? r?.[4]);
+    const volume = Number(r?.volume ?? r?.tickVolume ?? r?.[5] ?? 0) || 0;
+    if (!Number.isFinite(ts) || ![open, high, low, close].every(Number.isFinite)) return null;
+    return { openTime: new Date(ts).toISOString(), open, high, low, close, volume, isOpen: false };
+  }).filter(Boolean);
+}
+
+async function fetchDukascopy() {
+  const from = new Date(NOW - 14 * DAY);
+  const to = new Date(NOW);
+  const data = await getHistoricalRates({
+    instrument: 'xauusd',
+    dates: { from, to },
+    timeframe: 'm5',
+    priceType: 'bid',
+    format: 'array',
+    volumes: true,
+    ignoreFlats: true,
+    batchSize: 10,
+    pauseBetweenBatchesMs: 500
+  });
+  const rows = Array.isArray(data) ? data : data?.data;
+  const bars = normalizeRows(rows);
+  if (bars.length < MIN_M5) throw new Error(`Dukascopy returned only ${bars.length} usable M5 bars`);
+  return bars;
+}
+
+(async () => {
+  try {
+    const bars = await fetchDukascopy();
+    const unique = new Map();
+    for (const b of bars) unique.set(b.openTime, b);
+    const merged = [...unique.values()].sort((a, b) => Date.parse(a.openTime) - Date.parse(b.openTime));
+    if (merged.length < MIN_M5) throw new Error(`Insufficient closed XAUUSD M5 history: ${merged.length} bars; need at least ${MIN_M5}`);
+    fs.writeFileSync('/tmp/xau.json', JSON.stringify({ symbol: 'XAUUSD', interval: '5m', bars: merged }));
+    console.log(`Fetched ${merged.length} unique XAUUSD M5 bars from Dukascopy`);
+  } catch (err) {
+    const detail = err?.stack || err?.message || JSON.stringify(err);
+    throw new Error(`XAUUSD history fetch failed: ${detail}`);
+  }
+})();
