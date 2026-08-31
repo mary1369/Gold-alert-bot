@@ -35,15 +35,15 @@ jobs:
           test -n "$TELEGRAM_TOKEN" || { echo 'TELEGRAM_TOKEN is missing'; exit 1; }
           test -n "$TELEGRAM_CHAT_ID" || { echo 'TELEGRAM_CHAT_ID is missing'; exit 1; }
 
-      - name: Refresh XAUUSD M5 data with sufficient history
+      - name: Refresh XAUUSD M5 history
         shell: bash
         run: |
           set -euo pipefail
-          echo 'Fetching two 3-day XAUUSD M5 windows from biquote...'
           node scripts/fetch_xau_history.js
           node scripts/parse_yahoo_xau.js
+          echo "Final candle file: $(node -e 'const x=require("./xauusd_m5.json"); console.log(x.length)')"
 
-      - name: Fetch fresh MT5 Order Flow (optional bridge)
+      - name: Fetch fresh MT5 Order Flow (optional)
         env:
           MT5_ORDERFLOW_URL: ${{ secrets.MT5_ORDERFLOW_URL }}
           MT5_ORDERFLOW_KEY: ${{ secrets.MT5_ORDERFLOW_KEY }}
@@ -52,22 +52,15 @@ jobs:
           set -euo pipefail
           rm -f orderflow.json
           if [ -z "${MT5_ORDERFLOW_URL:-}" ]; then
-            echo 'MT5 Order Flow bridge is not configured; continuing with existing price/SMC policy.'
+            echo 'MT5 Order Flow unavailable/config not set; continuing without flow.'
             exit 0
           fi
-          echo 'Fetching fresh MT5 Order Flow...'
           if [ -n "${MT5_ORDERFLOW_KEY:-}" ]; then
-            curl -fsSL --max-time 10 -H "X-API-Key: ${MT5_ORDERFLOW_KEY}" \
-              "${MT5_ORDERFLOW_URL}" -o orderflow.json || {
-                echo 'MT5 Order Flow unavailable; continuing without flow confirmation.'
-                rm -f orderflow.json
-              }
+            curl -fsSL --max-time 10 -H "X-API-Key: ${MT5_ORDERFLOW_KEY}" "$MT5_ORDERFLOW_URL" -o orderflow.json || rm -f orderflow.json
           else
-            curl -fsSL --max-time 10 "${MT5_ORDERFLOW_URL}" -o orderflow.json || {
-              echo 'MT5 Order Flow unavailable; continuing without flow confirmation.'
-              rm -f orderflow.json
-            }
+            curl -fsSL --max-time 10 "$MT5_ORDERFLOW_URL" -o orderflow.json || rm -f orderflow.json
           fi
+          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without it.'
 
       - name: Syntax and dependency checks
         run: npm run check
