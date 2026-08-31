@@ -32,16 +32,29 @@ function usableFresh(bars) {
   return age >= 0 && age <= MAX_AGE_MS;
 }
 
-async function fetchDukascopy() {
-  const from = new Date(NOW - 14 * DAY);
+async function fetchHistoricalWindow(days, batchSize) {
+  const from = new Date(NOW - days * DAY);
   const to = new Date(NOW);
   const data = await getHistoricalRates({
     instrument: 'xauusd', dates: { from, to }, timeframe: 'm5', priceType: 'bid',
-    format: 'array', volumes: true, ignoreFlats: true, batchSize: 10,
-    pauseBetweenBatchesMs: 500, retryCount: 2, pauseBetweenRetriesMs: 500,
+    format: 'array', volumes: true, ignoreFlats: true, batchSize,
+    pauseBetweenBatchesMs: 800, retryCount: 3, pauseBetweenRetriesMs: 1000,
     retryOnEmpty: true
   });
   return normalizeRows(Array.isArray(data) ? data : data?.data);
+}
+
+async function fetchDukascopy() {
+  for (const [days, batch] of [[7, 3], [3, 2], [2, 1]]) {
+    try {
+      const bars = await fetchHistoricalWindow(days, batch);
+      console.log(`Dukascopy historical attempt ${days}d/${batch}batch: ${bars.length} bars`);
+      if (bars.length >= MIN_M5 || usableFresh(bars)) return bars;
+    } catch (e) {
+      console.log(`Dukascopy historical attempt ${days}d failed: ${e.message}`);
+    }
+  }
+  return [];
 }
 
 function ticksToM5(ticks) {
