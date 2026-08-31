@@ -67,13 +67,15 @@ jobs:
           [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without it.'
 
       - name: Syntax and dependency checks
-        run: npm run check
+        run: |
+          npm run check
+          node --check server_v5.js
 
-      - name: Run XAUUSD V4 analysis
+      - name: Run XAUUSD V5 analysis
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node orderflow_gate.js
+        run: node server_v5.js
 
       - name: Commit state and refreshed candles
         if: always()
@@ -86,6 +88,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No state changes to commit.'
           else
-            git commit -m 'update XAUUSD V4 state [skip ci]'
+            git commit -m 'update XAUUSD V5 state [skip ci]'
             git push
           fi
