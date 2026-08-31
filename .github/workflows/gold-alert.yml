@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: xau-smc-gold-alert
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check-price:
@@ -43,21 +43,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ok=0
+          # One fetch script owns provider fallback and freshness validation.
+          # Keep retries here only for transient provider failures.
+          success=0
           for attempt in 1 2 3; do
             echo "XAUUSD feed attempt $attempt/3"
             if node scripts/fetch_xau_history.js && node scripts/parse_yahoo_xau.js; then
-              ok=1
+              success=1
               break
             fi
-            echo "Feed attempt $attempt failed; waiting before retry..."
-            sleep $((15 * attempt))
+            echo "Feed attempt $attempt failed; backing off..."
+            sleep $((20 * attempt))
           done
-          if [ "$ok" -ne 1 ]; then
-            echo 'Unable to obtain a fresh XAUUSD M5 feed after 3 attempts.'
+          if [ "$success" -ne 1 ]; then
+            echo 'Unable to obtain a fresh XAUUSD M5 feed. No signal will be generated.'
             exit 1
           fi
-          echo "Final candle file: $(node -e 'const x=require("./xauusd_m5.json"); console.log(x.length)')"
+          node -e 'const x=require("./xauusd_m5.json"); if(!Array.isArray(x)||x.length<1200) throw new Error(`Invalid M5 history: ${x?.length||0}`); const age=Date.now()-x.at(-1).time; if(age<0||age>20*60*1000) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m`); console.log(`Validated ${x.length} M5 bars; latest=${new Date(x.at(-1).time).toISOString()}`)'
 
       - name: Fetch fresh MT5 Order Flow (optional)
         env:
