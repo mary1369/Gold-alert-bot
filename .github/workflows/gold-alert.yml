@@ -47,6 +47,32 @@ jobs:
             "$URL" -o /tmp/xau.json
           node scripts/parse_yahoo_xau.js
 
+      - name: Fetch fresh MT5 Order Flow (optional bridge)
+        env:
+          MT5_ORDERFLOW_URL: ${{ secrets.MT5_ORDERFLOW_URL }}
+          MT5_ORDERFLOW_KEY: ${{ secrets.MT5_ORDERFLOW_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f orderflow.json
+          if [ -z "${MT5_ORDERFLOW_URL:-}" ]; then
+            echo 'MT5 Order Flow bridge is not configured; continuing with existing price/SMC policy.'
+            exit 0
+          fi
+          echo 'Fetching fresh MT5 Order Flow...'
+          if [ -n "${MT5_ORDERFLOW_KEY:-}" ]; then
+            curl -fsSL --max-time 10 -H "X-API-Key: ${MT5_ORDERFLOW_KEY}" \
+              "${MT5_ORDERFLOW_URL}" -o orderflow.json || {
+                echo 'MT5 Order Flow unavailable; continuing without flow confirmation.'
+                rm -f orderflow.json
+              }
+          else
+            curl -fsSL --max-time 10 "${MT5_ORDERFLOW_URL}" -o orderflow.json || {
+              echo 'MT5 Order Flow unavailable; continuing without flow confirmation.'
+              rm -f orderflow.json
+            }
+          fi
+
       - name: Syntax and dependency checks
         run: npm run check
 
