@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check-price:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -26,6 +26,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Validate Telegram secrets
         env:
