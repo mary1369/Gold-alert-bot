@@ -6,7 +6,17 @@ const M5 = 5 * 60 * 1000;
 const NOW = Date.now();
 const MIN_M5 = 1200;
 const MAX_AGE_MS = 20 * 60 * 1000;
+const CLOSED_BREAK_MAX_AGE_MS = 90 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 12000;
+
+function inDailyGoldBreak() {
+  const h = new Date(NOW).getUTCHours();
+  return h === 21;
+}
+
+function allowedAgeMs() {
+  return inDailyGoldBreak() ? CLOSED_BREAK_MAX_AGE_MS : MAX_AGE_MS;
+}
 
 function ts(v) {
   if (typeof v === 'string') {
@@ -47,7 +57,7 @@ function fresh(rows) {
   const x = closed(rows);
   if (x.length < MIN_M5) return false;
   const age = NOW - Date.parse(x.at(-1).openTime);
-  return age >= 0 && age <= MAX_AGE_MS;
+  return age >= 0 && age <= allowedAgeMs();
 }
 
 function loadCache() {
@@ -178,7 +188,7 @@ async function dukascopyM5(days) {
     }
   }
 
-  if (!fresh(bars)) {
+  if (!fresh(bars) && !inDailyGoldBreak()) {
     for (const days of [2, 5, 10]) {
       try {
         const got = closed(await dukascopyM5(days));
@@ -189,17 +199,19 @@ async function dukascopyM5(days) {
         console.log(`Dukascopy M5 ${days}d failed: ${e?.stack || e?.message || String(e)}`);
       }
     }
+  } else if (inDailyGoldBreak()) {
+    console.log('XAUUSD daily market break detected (UTC 21:00-22:00); using last valid closed M5 history and skipping recovery downloads.');
   }
 
   bars = closed(bars);
   if (!fresh(bars)) {
     const latest = bars.length ? new Date(Date.parse(bars.at(-1).openTime)).toISOString() : 'none';
-    throw new Error(`No fresh XAUUSD M5 feed: bars=${bars.length}, latest=${latest}`);
+    throw new Error(`No acceptable XAUUSD M5 feed: bars=${bars.length}, latest=${latest}, marketBreak=${inDailyGoldBreak()}`);
   }
 
   const out = bars.slice(-3000);
   fs.writeFileSync('/tmp/xau.json', JSON.stringify({ symbol: 'XAUUSD', interval: '5m', bars: out }));
-  console.log(`Published ${out.length} unique fresh closed XAUUSD M5 bars; latest=${out.at(-1).openTime}`);
+  console.log(`Published ${out.length} unique closed XAUUSD M5 bars; latest=${out.at(-1).openTime}; marketBreak=${inDailyGoldBreak()}`);
 })().catch((err) => {
   console.error(err?.stack || err?.message || err);
   process.exit(1);
