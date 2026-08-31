@@ -90,8 +90,8 @@ async function biquoteLatest() {
 
 async function yahooGoldFuturesM5(cache) {
   const urls = [
-    'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=5m&includePrePost=true&events=div%2Csplits',
-    'https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?range=5d&interval=5m&includePrePost=true&events=div%2Csplits'
+    'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=7d&interval=5m&includePrePost=true&events=div%2Csplits',
+    'https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?range=7d&interval=5m&includePrePost=true&events=div%2Csplits'
   ];
   let lastError;
   let result;
