@@ -1,3 +1,4 @@
+// V5 validation: analyze the latest verified closed M5 candle.
 const fs=require('fs');
 const TOKEN=process.env.TELEGRAM_TOKEN,CHAT=process.env.TELEGRAM_CHAT_ID,FILE='./xauusd_m5.json',STATE='./state_v2.json';
 const MIN_SCORE=7,MAX_SCORE=10,FIBS=[0.236,0.382,0.5,0.618,0.65,0.705,0.786,0.886];
@@ -6,9 +7,10 @@ function normalizeTs(ts){let x=Number(ts);if(!Number.isFinite(x))return null;if(
 const candles=load(FILE,[]).map(c=>({time:normalizeTs(c.time??c.openTime),open:+c.open,high:+c.high,low:+c.low,close:+c.close,volume:+c.volume||0,isOpen:c.isOpen===true})).filter(c=>c.time&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
 if(candles.length<1200)throw Error(`Need >=1200 M5 candles, got ${candles.length}`);
 const closed=candles.filter(c=>!c.isOpen);const latest=closed.at(-1),NOW=Date.now(),MAX_AGE=15*60*1000;if(!latest)process.exit(0);if(NOW-latest.time>MAX_AGE){console.log(`STALE DATA: latest closed candle ${new Date(latest.time).toISOString()}, age ${Math.round((NOW-latest.time)/60000)}m`);process.exit(0)}
+console.log(`ANALYSIS CANDLE: ${new Date(latest.time).toISOString()} | age=${Math.round((NOW-latest.time)/60000)}m | closed=true`);
 function agg(a,min){const step=min*60000,o=[];for(const c of a){const t=Math.floor(c.time/step)*step,x=o.at(-1);if(!x||x.time!==t)o.push({time:t,open:c.open,high:c.high,low:c.low,close:c.close,volume:c.volume});else{x.high=Math.max(x.high,c.high);x.low=Math.min(x.low,c.low);x.close=c.close;x.volume+=c.volume}}return o}
 function ema(a,n){if(a.length<n)return null;let e=a[0].close,k=2/(n+1);for(let i=1;i<a.length;i++)e+=(a[i].close-e)*k;return e}
-function atr(a,n=14){if(a.length<n+1)return null;const tr=[];for(let i=1;i<a.length;i++)tr.push(Math.max(a[i].high-a[i].low,Math.abs(a[i].low-a[i-1].close),Math.abs(a[i].high-a[i-1].close)));return tr.slice(-n).reduce((s,x)=>s+x,0)/n}
+function atr(a,n=14){if(a.length<n+1)return null;const tr=[];for(let i=1;i<a.length;i++)tr.push(Math.max(a[i].high-a[i-1].close,a[i].high-a[i-1].close,Math.abs(a[i].low-a[i-1].close),Math.abs(a[i].high-a[i-1].close)));return tr.slice(-n).reduce((s,x)=>s+x,0)/n}
 function trend(a){const e20=ema(a,20),e50=ema(a,50),c=a.at(-1)?.close;if(!e20||!e50||c==null)return'UNKNOWN';return c>e20&&e20>e50?'BULLISH':c<e20&&e20<e50?'BEARISH':'RANGE'}
 function swings(a){const r=[];for(let i=2;i<a.length-2;i++){if(a[i].high>a[i-1].high&&a[i].high>=a[i+1].high)r.push({type:'H',price:a[i].high,time:a[i].time});if(a[i].low<a[i-1].low&&a[i].low<=a[i+1].low)r.push({type:'L',price:a[i].low,time:a[i].time})}return r}
 function fib(a){const s=swings(a.slice(-160)),hs=s.filter(x=>x.type==='H'),ls=s.filter(x=>x.type==='L');if(!hs.length||!ls.length)return null;const hi=hs.at(-1),lo=ls.at(-1),up=hi.time>lo.time;const levels=Object.fromEntries(FIBS.map(f=>[f,up?lo.price+(hi.price-lo.price)*f:hi.price-(hi.price-lo.price)*f]));return{levels,anchorHigh:hi.price,anchorLow:lo.price,direction:up?'UP':'DOWN'}}
