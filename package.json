@@ -1,16 +1,17 @@
 {
   "name": "gold-alert-bot",
   "version": "4.0.0",
-  "description": "XAUUSD M5 SMC/ICT signal engine with strict real-MT5 Order Flow gate and Telegram alerts",
+  "description": "XAUUSD M5 SMC/ICT signal engine with optional real-MT5 Order Flow confirmation and Telegram alerts",
   "main": "server_v4.js",
   "scripts": {
     "start": "node server_v4.js",
-    "check": "node --check server_v4.js && node --check orderflow_gate.js"
+    "check": "node --check server_v4.js && node --check orderflow_gate.js && node --check scripts/fetch_xau_history.js && node --check scripts/parse_yahoo_xau.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "dukascopy-node": "1.50.0",
     "express": "^4.19.2"
   }
 }
