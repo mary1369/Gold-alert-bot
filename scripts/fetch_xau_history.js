@@ -49,48 +49,31 @@ function fresh(rows) {
   return age >= 0 && age <= MAX_AGE_MS;
 }
 
-async function biquotePage(from, to, label) {
-  const p = new URLSearchParams({ interval: '5m', limit: '1000' });
-  if (Number.isFinite(from)) p.set('from', new Date(from).toISOString());
-  if (Number.isFinite(to)) p.set('to', new Date(to).toISOString());
-  const url = `https://biquote.io/api/XAUUSD/ohlc?${p}`;
-  const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Gold-alert-bot/1.0' } });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`BiQuote ${label} HTTP ${r.status}: ${text.slice(0, 200)}`);
-  let j;
-  try { j = JSON.parse(text); } catch (e) { throw new Error(`BiQuote ${label} invalid JSON: ${e.message}`); }
-  const rows = Array.isArray(j) ? j : (j?.bars || j?.data || j?.candles || j?.result || []);
-  const bars = normalizeRows(rows);
-  console.log(`BiQuote ${label}: raw=${rows.length || 0} parsed=${bars.length} closed=${closed(bars).length} oldest=${bars.length ? bars[0].openTime : 'none'} latest=${bars.length ? bars.at(-1).openTime : 'none'}`);
-  if (!bars.length) throw new Error(`BiQuote ${label} returned no XAUUSD M5 bars`);
-  return bars;
+function loadCache() {
+  try {
+    const j = JSON.parse(fs.readFileSync('xauusd_m5.json', 'utf8'));
+    const rows = Array.isArray(j) ? j : (j?.bars || []);
+    const normalized = normalizeRows(rows);
+    console.log(`Cached XAUUSD M5: ${normalized.length} rows`);
+    return normalized;
+  } catch (_) {
+    console.log('No usable XAUUSD M5 cache found.');
+    return [];
+  }
 }
 
-async function biquoteM5() {
-  let all = [];
-  let to = NOW;
-  const WINDOW = 5 * DAY;
-
-  // BiQuote requires an explicit date range for older M5 history. Walk
-  // backwards in bounded windows; each window may return up to 1000 bars.
-  for (let page = 0; page < 10 && closed(all).length < MIN_M5; page++) {
-    const from = to - WINDOW;
-    const got = await biquotePage(from, to, `page-${page + 1}`);
-    const before = all.length;
-    all = unique([...all, ...got]);
-    if (all.length === before) break;
-
-    const oldest = Date.parse(all[0].openTime);
-    if (!Number.isFinite(oldest) || oldest >= to) break;
-    to = oldest - M5;
-  }
-
-  all = closed(all);
-  if (!fresh(all)) {
-    const latest = all.length ? new Date(Date.parse(all.at(-1).openTime)).toISOString() : 'none';
-    throw new Error(`BiQuote M5 insufficient/freshness failure: ${all.length} closed bars, latest=${latest}`);
-  }
-  return all;
+async function biquoteLatest() {
+  const url = 'https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=1000';
+  const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Gold-alert-bot/1.0' } });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`BiQuote latest HTTP ${r.status}: ${text.slice(0, 200)}`);
+  let j;
+  try { j = JSON.parse(text); } catch (e) { throw new Error(`BiQuote latest invalid JSON: ${e.message}`); }
+  const rows = Array.isArray(j) ? j : (j?.bars || j?.data || j?.candles || j?.result || []);
+  const bars = normalizeRows(rows);
+  console.log(`BiQuote latest: raw=${rows.length || 0} parsed=${bars.length} closed=${closed(bars).length} latest=${bars.length ? bars.at(-1).openTime : 'none'}`);
+  if (!bars.length) throw new Error('BiQuote returned no XAUUSD M5 bars');
+  return bars;
 }
 
 async function dukascopyM5(days) {
@@ -113,20 +96,28 @@ async function dukascopyM5(days) {
 }
 
 (async () => {
-  let bars = [];
+  let bars = loadCache();
+
+  // The repository cache is intentionally part of the feed pipeline.  BiQuote
+  // reliably provides the current M5 window, while the cache preserves older
+  // closed bars between scheduled GitHub Actions runs.  This avoids depending
+  // on an unstable third-party historical endpoint for every 5-minute run.
   try {
-    bars = closed(await biquoteM5());
-    console.log(`BiQuote M5 accepted: ${bars.length} closed bars`);
+    const live = await biquoteLatest();
+    bars = unique([...bars, ...live]);
+    console.log(`Merged live BiQuote data with cache: ${closed(bars).length} closed bars`);
   } catch (e) {
-    console.log(`BiQuote M5 failed: ${e?.stack || e?.message || String(e)}`);
+    console.log(`BiQuote latest failed: ${e?.stack || e?.message || String(e)}`);
   }
 
+  // Only use Dukascopy when the persisted cache + live refresh cannot satisfy
+  // the minimum history.  It is never required for the normal path.
   if (!fresh(bars)) {
     for (const days of [2, 5, 10]) {
       try {
         const got = closed(await dukascopyM5(days));
         console.log(`Dukascopy M5 ${days}d: ${got.length}`);
-        bars = closed([...bars, ...got]);
+        bars = unique([...bars, ...got]);
         if (fresh(bars)) break;
       } catch (e) {
         console.log(`Dukascopy M5 ${days}d failed: ${e?.stack || e?.message || String(e)}`);
@@ -134,6 +125,7 @@ async function dukascopyM5(days) {
     }
   }
 
+  bars = closed(bars);
   if (!fresh(bars)) {
     const latest = bars.length ? new Date(Date.parse(bars.at(-1).openTime)).toISOString() : 'none';
     throw new Error(`No fresh XAUUSD M5 feed: bars=${bars.length}, latest=${latest}`);
