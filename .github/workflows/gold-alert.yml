@@ -35,16 +35,12 @@ jobs:
           test -n "$TELEGRAM_TOKEN" || { echo 'TELEGRAM_TOKEN is missing'; exit 1; }
           test -n "$TELEGRAM_CHAT_ID" || { echo 'TELEGRAM_CHAT_ID is missing'; exit 1; }
 
-      - name: Refresh XAUUSD M5 data
+      - name: Refresh XAUUSD M5 data with sufficient history
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://biquote.io/api/XAUUSD/ohlc?interval=5m&limit=1000'
-          echo 'Fetching XAUUSD M5 candles from biquote...'
-          curl -fsSL --retry 3 --retry-delay 2 --max-time 30 \
-            -H 'Accept: application/json' \
-            -A 'Gold-alert-bot/1.0' \
-            "$URL" -o /tmp/xau.json
+          echo 'Fetching two 3-day XAUUSD M5 windows from biquote...'
+          node scripts/fetch_xau_history.js
           node scripts/parse_yahoo_xau.js
 
       - name: Fetch fresh MT5 Order Flow (optional bridge)
