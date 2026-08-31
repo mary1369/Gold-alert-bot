@@ -14,8 +14,20 @@ function inDailyGoldBreak() {
   return h === 21;
 }
 
-function allowedAgeMs() {
-  return inDailyGoldBreak() ? CLOSED_BREAK_MAX_AGE_MS : MAX_AGE_MS;
+// Some public gold feeds stop publishing a few minutes before/after the
+// daily CME/spot rollover. Treat an otherwise valid :59 closed candle as
+// belonging to that rollover gap, instead of failing the entire pipeline.
+function rolloverGapFor(rows) {
+  const x = closed(rows);
+  if (!x.length) return false;
+  const latest = new Date(Date.parse(x.at(-1).openTime));
+  const minute = latest.getUTCMinutes();
+  const age = NOW - latest.getTime();
+  return minute >= 58 && age >= 0 && age <= CLOSED_BREAK_MAX_AGE_MS;
+}
+
+function allowedAgeMs(rows = []) {
+  return (inDailyGoldBreak() || rolloverGapFor(rows)) ? CLOSED_BREAK_MAX_AGE_MS : MAX_AGE_MS;
 }
 
 function ts(v) {
@@ -57,7 +69,7 @@ function fresh(rows) {
   const x = closed(rows);
   if (x.length < MIN_M5) return false;
   const age = NOW - Date.parse(x.at(-1).openTime);
-  return age >= 0 && age <= allowedAgeMs();
+  return age >= 0 && age <= allowedAgeMs(x);
 }
 
 function loadCache() {
@@ -201,6 +213,8 @@ async function dukascopyM5(days) {
     }
   } else if (inDailyGoldBreak()) {
     console.log('XAUUSD daily market break detected (UTC 21:00-22:00); using last valid closed M5 history and skipping recovery downloads.');
+  } else if (rolloverGapFor(bars)) {
+    console.log('XAUUSD rollover feed gap detected; accepting fresh closed history within the 90-minute rollover tolerance and skipping unnecessary recovery downloads.');
   }
 
   bars = closed(bars);
@@ -211,7 +225,7 @@ async function dukascopyM5(days) {
 
   const out = bars.slice(-3000);
   fs.writeFileSync('/tmp/xau.json', JSON.stringify({ symbol: 'XAUUSD', interval: '5m', bars: out }));
-  console.log(`Published ${out.length} unique closed XAUUSD M5 bars; latest=${out.at(-1).openTime}; marketBreak=${inDailyGoldBreak()}`);
+  console.log(`Published ${out.length} unique closed XAUUSD M5 bars; latest=${out.at(-1).openTime}; maxAge=${Math.round(allowedAgeMs(out) / 60000)}m`);
 })().catch((err) => {
   console.error(err?.stack || err?.message || err);
   process.exit(1);
