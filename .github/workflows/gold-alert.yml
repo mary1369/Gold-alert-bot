@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check-price:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -43,8 +43,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/fetch_xau_history.js
-          node scripts/parse_yahoo_xau.js
+          ok=0
+          for attempt in 1 2 3; do
+            echo "XAUUSD feed attempt $attempt/3"
+            if node scripts/fetch_xau_history.js && node scripts/parse_yahoo_xau.js; then
+              ok=1
+              break
+            fi
+            echo "Feed attempt $attempt failed; waiting before retry..."
+            sleep $((15 * attempt))
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo 'Unable to obtain a fresh XAUUSD M5 feed after 3 attempts.'
+            exit 1
+          fi
           echo "Final candle file: $(node -e 'const x=require("./xauusd_m5.json"); console.log(x.length)')"
 
       - name: Fetch fresh MT5 Order Flow (optional)
@@ -64,7 +76,7 @@ jobs:
           else
             curl -fsSL --max-time 10 "$MT5_ORDERFLOW_URL" -o orderflow.json || rm -f orderflow.json
           fi
-          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without it.'
+          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without flow.'
 
       - name: Syntax and dependency checks
         run: |
