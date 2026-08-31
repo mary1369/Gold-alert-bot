@@ -54,12 +54,26 @@ jobs:
             sleep $((20 * attempt))
           done
           if [ "$success" -ne 1 ]; then
-            echo 'Unable to obtain a fresh XAUUSD M5 feed. No signal will be generated.'
+            echo 'Unable to obtain an acceptable XAUUSD M5 feed. No signal will be generated.'
             exit 1
           fi
-          node -e 'const x=require("./xauusd_m5.json"); if(!Array.isArray(x)||x.length<1200) throw new Error(`Invalid M5 history: ${x?.length||0}`); const age=Date.now()-x.at(-1).time; if(age<0||age>20*60*1000) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m`); console.log(`Validated ${x.length} M5 bars; latest=${new Date(x.at(-1).time).toISOString()}`)'
+          node -e 'const x=require("./xauusd_m5.json"); const h=new Date().getUTCHours(); const maxAge=h===21?90*60*1000:20*60*1000; if(!Array.isArray(x)||x.length<1200) throw new Error(`Invalid M5 history: ${x?.length||0}`); const age=Date.now()-x.at(-1).time; if(age<0||age>maxAge) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m (max ${Math.round(maxAge/60000)}m)`); console.log(`Validated ${x.length} M5 bars; latest=${new Date(x.at(-1).time).toISOString()}; marketBreak=${h===21}`)'
+
+      - name: Detect XAUUSD market session
+        shell: bash
+        run: |
+          set -euo pipefail
+          hour=$(date -u +%H)
+          if [ "$hour" = "21" ]; then
+            echo 'XAUUSD_MARKET_OPEN=0' >> "$GITHUB_ENV"
+            echo 'XAUUSD daily market break: 21:00-22:00 UTC. Feed is valid; analysis intentionally skipped.'
+          else
+            echo 'XAUUSD_MARKET_OPEN=1' >> "$GITHUB_ENV"
+            echo 'XAUUSD market session active.'
+          fi
 
       - name: Fetch fresh MT5 Order Flow (optional)
+        if: env.XAUUSD_MARKET_OPEN != '0'
         env:
           MT5_ORDERFLOW_URL: ${{ secrets.MT5_ORDERFLOW_URL }}
           MT5_ORDERFLOW_KEY: ${{ secrets.MT5_ORDERFLOW_KEY }}
@@ -76,7 +90,7 @@ jobs:
           else
             curl -fsSL --max-time 10 "$MT5_ORDERFLOW_URL" -o orderflow.json || rm -f orderflow.json
           fi
-          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without it.'
+          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without flow.'
 
       - name: Syntax and dependency checks
         run: |
@@ -84,6 +98,7 @@ jobs:
           node --check server_v5.js
 
       - name: Run XAUUSD V5 analysis
+        if: env.XAUUSD_MARKET_OPEN != '0'
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
