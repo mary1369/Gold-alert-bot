@@ -9,7 +9,7 @@ const bars = raw.filter(b => !b?.isOpen).map(b => ({
 })).filter(b => Number.isFinite(b.time) && [b.open,b.high,b.low,b.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
 const out=[];
 for(const b of bars){ if(!out.length || b.time>out.at(-1).time) out.push(b); }
-const MIN_M5=240;
+const MIN_M5=1200;
 if(out.length<MIN_M5) throw new Error(`Insufficient closed XAUUSD M5 history: ${out.length} bars (minimum ${MIN_M5})`);
 const latest=out.at(-1).time;
 const age=Date.now()-latest;
