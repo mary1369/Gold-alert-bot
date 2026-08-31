@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: xau-smc-gold-alert
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   check-price:
@@ -76,7 +76,7 @@ jobs:
           else
             curl -fsSL --max-time 10 "$MT5_ORDERFLOW_URL" -o orderflow.json || rm -f orderflow.json
           fi
-          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without flow.'
+          [ -f orderflow.json ] && echo 'Fresh MT5 Order Flow received.' || echo 'No fresh MT5 Order Flow; continuing without it.'
 
       - name: Syntax and dependency checks
         run: |
