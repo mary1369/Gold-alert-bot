@@ -185,6 +185,72 @@ function recentSweep(source, direction) {
   return null;
 }
 
+// TP is based on actual opposing liquidity/structure, not a fixed 1R/2R formula.
+// TP1 = nearest valid opposing swing/liquidity target beyond entry.
+// TP2 = next opposing structural target; Fibonacci extensions are used only as
+// a deterministic fallback when there is not enough visible liquidity.
+function calculateTargets(source, direction, entry, risk) {
+  if (!Number.isFinite(entry) || !Number.isFinite(risk) || risk <= 0) return null;
+
+  const lookback = source.slice(-120);
+  const structuralRange = Math.max(recentRange(source, 20), risk, 0.5);
+  const minDistance = Math.max(structuralRange * 0.12, 0.5);
+  const swingData = swings(lookback);
+
+  const opposing = swingData
+    .filter((s) => direction === 'BUY' ? s.type === 'H' && s.price > entry : s.type === 'L' && s.price < entry)
+    .map((s) => ({ price: s.price, time: s.time, type: s.type }))
+    .filter((s) => direction === 'BUY' ? s.price - entry >= minDistance : entry - s.price >= minDistance);
+
+  const unique = [];
+  for (const target of opposing.sort((a, b) => direction === 'BUY' ? a.price - b.price : b.price - a.price)) {
+    if (!unique.some((x) => Math.abs(x.price - target.price) < 0.15)) unique.push(target);
+  }
+
+  let tp1 = unique[0]?.price ?? null;
+  let tp2 = unique[1]?.price ?? null;
+
+  // If the nearest swing is too close to the invalidation distance, do not use it.
+  if (tp1 !== null) {
+    const rr1 = direction === 'BUY' ? (tp1 - entry) / risk : (entry - tp1) / risk;
+    if (!Number.isFinite(rr1) || rr1 < 0.8) tp1 = null;
+  }
+  if (tp2 !== null) {
+    const rr2 = direction === 'BUY' ? (tp2 - entry) / risk : (entry - tp2) / risk;
+    if (!Number.isFinite(rr2) || rr2 <= 1.0) tp2 = null;
+  }
+
+  // Deterministic Fibonacci extension fallback from the latest completed swing leg.
+  const f = fib(lookback);
+  if (f && f.range > 0) {
+    if (tp1 === null) {
+      const fibTp1 = direction === 'BUY' ? f.anchorHigh + f.range * 0.272 : f.anchorLow - f.range * 0.272;
+      if (Number.isFinite(fibTp1)) {
+        const rr = direction === 'BUY' ? (fibTp1 - entry) / risk : (entry - fibTp1) / risk;
+        if (rr >= 0.8) tp1 = fibTp1;
+      }
+    }
+    if (tp2 === null) {
+      const fibTp2 = direction === 'BUY' ? f.anchorHigh + f.range * 0.618 : f.anchorLow - f.range * 0.618;
+      if (Number.isFinite(fibTp2)) {
+        const rr = direction === 'BUY' ? (fibTp2 - entry) / risk : (entry - fibTp2) / risk;
+        if (rr > 1.0) tp2 = fibTp2;
+      }
+    }
+  }
+
+  // Final deterministic fallback: preserve directional validity and extend beyond TP1.
+  if (tp1 === null) tp1 = direction === 'BUY' ? entry + risk : entry - risk;
+  if (tp2 === null || (direction === 'BUY' ? tp2 <= tp1 : tp2 >= tp1)) {
+    tp2 = direction === 'BUY' ? Math.max(tp1 + risk * 0.75, entry + risk * 1.5) : Math.min(tp1 - risk * 0.75, entry - risk * 1.5);
+  }
+
+  if (direction === 'BUY' && !(tp1 > entry && tp2 > tp1)) return null;
+  if (direction === 'SELL' && !(tp1 < entry && tp2 < tp1)) return null;
+
+  return { tp1, tp2 };
+}
+
 function signalAt(index) {
   const a = closed.slice(0, index + 1);
   if (a.length < 160) return null;
@@ -230,9 +296,6 @@ function signalAt(index) {
   const bullContext = st1 !== 'BEARISH' && st15 !== 'BEARISH';
   const bearContext = st1 !== 'BULLISH' && st15 !== 'BULLISH';
 
-  // Direction is now selected by independent directional evidence instead of
-  // BUY-first precedence. If both sides qualify, the stronger side wins only
-  // when the difference is meaningful; otherwise we stay flat.
   const buyReversal = Boolean(buySweep && (buySweep.mss || buySweep.bos));
   const sellReversal = Boolean(sellSweep && (sellSweep.mss || sellSweep.bos));
   const buyContinuation = bullContext && bosBuy && displacement;
@@ -254,7 +317,6 @@ function signalAt(index) {
       direction = 'SELL';
       setup = sellReversal ? 'LIQUIDITY_SWEEP_MSS' : sellRejection ? 'RESISTANCE_REJECTION' : 'STRUCTURE_CONTINUATION';
     } else if (sellEvidence === buyEvidence) {
-      // Conflicting directional evidence is not a trade.
       return null;
     }
   }
@@ -293,13 +355,19 @@ function signalAt(index) {
   risk = Math.max(structuralRange * 0.25, Math.min(structuralRange * 1.5, risk));
   if (!Number.isFinite(risk) || risk <= 0) return null;
 
+  const targets = calculateTargets(a, direction, entry, risk);
+  if (!targets) {
+    console.log(`TP INVALID — no directionally valid structural targets for ${direction}; signal blocked`);
+    return null;
+  }
+
   return {
     direction,
     setup,
     entry,
     sl: direction === 'BUY' ? entry - risk : entry + risk,
-    tp1: direction === 'BUY' ? entry + risk : entry - risk,
-    tp2: direction === 'BUY' ? entry + 2 * risk : entry - 2 * risk,
+    tp1: targets.tp1,
+    tp2: targets.tp2,
     score,
     candleTime: c.time,
     h4: st4,
