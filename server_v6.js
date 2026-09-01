@@ -81,7 +81,7 @@ function fib(src) {
   if(!h||!l||h.price===l.price) return null;
   const d=Math.abs(h.price-l.price), up=h.time>l.time;
   const levels=Object.fromEntries(FIBS.map(r=>[r,up?l.price+d*r:h.price-d*r]));
-  return {levels,range:d,direction:up?'UP':'DOWN'};
+  return {levels,range:d,direction:up?'UP':'DOWN',anchorHigh:h.price,anchorLow:l.price};
 }
 
 function fibNear(f, price) {
@@ -137,6 +137,56 @@ function fvg(src,direction) {
   return null;
 }
 
+// Targets are now selected from real opposing liquidity first.
+// TP1 is the nearest meaningful opposing swing beyond entry.
+// TP2 is the next opposing swing. Fibonacci extensions are used only when
+// visible opposing liquidity is insufficient. A deterministic R fallback is
+// kept only as a last resort, and every target is directionally validated.
+function calculateTargets(src, direction, entry, risk) {
+  if(!Number.isFinite(entry)||!Number.isFinite(risk)||risk<=0) return null;
+
+  const lookback=src.slice(-120);
+  const structuralRange=Math.max(...lookback.map(x=>x.high))-Math.min(...lookback.map(x=>x.low));
+  const minTargetDistance=Math.max(structuralRange*0.10,0.5);
+  const minRR=0.80;
+  const swings=swingPoints(lookback,2);
+
+  const candidates=swings
+    .filter(s=>direction==='BUY'?s.type==='H'&&s.price>entry:s.type==='L'&&s.price<entry)
+    .map(s=>s.price)
+    .filter(p=>direction==='BUY'?p-entry>=minTargetDistance:entry-p>=minTargetDistance)
+    .sort((a,b)=>direction==='BUY'?a-b:b-a);
+
+  const unique=[];
+  for(const p of candidates) if(!unique.some(x=>Math.abs(x-p)<0.15)) unique.push(p);
+
+  let tp1=unique.find(p=>(direction==='BUY'?(p-entry):(entry-p))/risk>=minRR) ?? null;
+  let tp2=unique.find(p=>(direction==='BUY'?(p-entry):(entry-p))/risk>1.0 && (tp1===null || (direction==='BUY'?p>tp1:p<tp1))) ?? null;
+
+  const f=fib(lookback);
+  if(f) {
+    if(tp1===null) {
+      const p=direction==='BUY'?f.anchorHigh+f.range*0.272:f.anchorLow-f.range*0.272;
+      const rr=direction==='BUY'?(p-entry)/risk:(entry-p)/risk;
+      if(Number.isFinite(p)&&rr>=minRR) tp1=p;
+    }
+    if(tp2===null) {
+      const p=direction==='BUY'?f.anchorHigh+f.range*0.618:f.anchorLow-f.range*0.618;
+      const rr=direction==='BUY'?(p-entry)/risk:(entry-p)/risk;
+      if(Number.isFinite(p)&&rr>1.0&&(tp1===null||(direction==='BUY'?p>tp1:p<tp1))) tp2=p;
+    }
+  }
+
+  if(tp1===null) tp1=direction==='BUY'?entry+risk:entry-risk;
+  if(tp2===null || (direction==='BUY'?tp2<=tp1:tp2>=tp1)) {
+    tp2=direction==='BUY'?Math.max(tp1+risk*0.75,entry+risk*1.5):Math.min(tp1-risk*0.75,entry-risk*1.5);
+  }
+
+  if(direction==='BUY'&&!(tp1>entry&&tp2>tp1)) return null;
+  if(direction==='SELL'&&!(tp1<entry&&tp2<tp1)) return null;
+  return {tp1,tp2};
+}
+
 function analyze() {
   const m15=aggregate(closed,15), h1=aggregate(closed,60), h4=aggregate(closed,240);
   if(m15.length<20||h1.length<30||h4.length<12) return null;
@@ -169,7 +219,6 @@ function analyze() {
   const setup=sweep?'LIQUIDITY_SWEEP_MSS':'STRUCTURE_CONTINUATION';
   const ob=orderBlock(closed,direction), gap=fvg(closed,direction), f=fib(closed), fm=fibNear(f,c.close);
 
-  // Independent score; OB/FVG are confirmations, never direction selectors.
   let score=0;
   if(sweep) score+=3;
   if(mss) score+=2;
@@ -190,7 +239,13 @@ function analyze() {
   const risk=Math.max(structural*0.25,Math.min(structural*1.25,rawRisk));
   if(!Number.isFinite(risk)||risk<=0) return null;
 
-  return {direction,setup,score,entry,sl:direction==='BUY'?entry-risk:entry+risk,tp1:direction==='BUY'?entry+risk:entry-risk,tp2:direction==='BUY'?entry+2*risk:entry-2*risk,candleTime:c.time,h4:st4,h1:st1,m15:st15,bos,mss,sweep:Boolean(sweep),displacement,ob,fvg:gap,fib:fm};
+  const targets=calculateTargets(closed,direction,entry,risk);
+  if(!targets) {
+    console.log(`TP INVALID — no directionally valid target for ${direction}; Telegram blocked`);
+    return null;
+  }
+
+  return {direction,setup,score,entry,sl:direction==='BUY'?entry-risk:entry+risk,tp1:targets.tp1,tp2:targets.tp2,candleTime:c.time,h4:st4,h1:st1,m15:st15,bos,mss,sweep:Boolean(sweep),displacement,ob,fvg:gap,fib:fm};
 }
 
 const signal=analyze();
@@ -201,9 +256,10 @@ if(!signal || Date.now()-signal.candleTime>SIGNAL_MAX_AGE) {
   process.exit(0);
 }
 
+console.log(`QUALIFYING SIGNAL: ${signal.direction} ${signal.setup} score=${signal.score}/10 candle=${new Date(signal.candleTime).toISOString()} tp1=${signal.tp1.toFixed(2)} tp2=${signal.tp2.toFixed(2)}`);
+
 const iran=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
 const signalTime=iran.format(new Date(signal.candleTime));
-console.log(`QUALIFYING SIGNAL: ${signal.direction} ${signal.setup} score=${signal.score}/10 candle=${new Date(signal.candleTime).toISOString()} iran=${signalTime}`);
 
 const state=load(STATE,{});
 const key=`${signal.direction}|${signal.setup}|${signal.candleTime}|${signal.entry.toFixed(2)}`;
