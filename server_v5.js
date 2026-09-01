@@ -146,6 +146,45 @@ function detectFvg(source, direction) {
   return null;
 }
 
+// A sweep is valid only when its liquidity level is defined BEFORE the sweep candle.
+// Confirmation must happen AFTER the sweep. This prevents a stale sweep from being
+// combined with an unrelated later MSS/BOS and creating a false direction.
+function recentSweep(source, direction) {
+  const first = Math.max(6, source.length - 8);
+  for (let i = source.length - 1; i >= first; i -= 1) {
+    const prior = source.slice(i - 6, i);
+    if (prior.length < 6) continue;
+    const level = direction === 'BUY'
+      ? Math.min(...prior.map((x) => x.low))
+      : Math.max(...prior.map((x) => x.high));
+    const c = source[i];
+    const swept = direction === 'BUY'
+      ? c.low < level && c.close > level
+      : c.high > level && c.close < level;
+    if (!swept) continue;
+
+    for (let j = i + 1; j <= Math.min(source.length - 1, i + 3); j += 1) {
+      const confirm = source[j];
+      const p3 = source.slice(Math.max(0, j - 3), j);
+      const p6 = source.slice(Math.max(0, j - 6), j);
+      if (p3.length < 3 || p6.length < 6) continue;
+      const high3 = Math.max(...p3.map((x) => x.high));
+      const low3 = Math.min(...p3.map((x) => x.low));
+      const high6 = Math.max(...p6.map((x) => x.high));
+      const low6 = Math.min(...p6.map((x) => x.low));
+      const body = Math.abs(confirm.close - confirm.open);
+      const candleRange = Math.max(confirm.high - confirm.low, 1e-9);
+      const displacement = body / candleRange >= 0.35;
+      const mss = direction === 'BUY' ? confirm.close > high3 : confirm.close < low3;
+      const bos = direction === 'BUY' ? confirm.close > high6 : confirm.close < low6;
+      if ((mss || bos) && displacement) {
+        return { sweepIndex: i, confirmIndex: j, level, mss, bos, displacement, time: c.time };
+      }
+    }
+  }
+  return null;
+}
+
 function signalAt(index) {
   const a = closed.slice(0, index + 1);
   if (a.length < 160) return null;
@@ -168,13 +207,16 @@ function signalAt(index) {
 
   const range = Math.max(c.high - c.low, 1e-9);
   const body = Math.abs(c.close - c.open);
-  const displacement = body / range >= 0.45;
+  const displacement = body / range >= 0.35;
   const bosBuy = c.close > prevHigh6;
   const bosSell = c.close < prevLow6;
   const mssBuy = c.close > prevHigh3;
   const mssSell = c.close < prevLow3;
-  const sweepBuy = a.slice(-5).some((x) => x.low < prevLow6 && x.close > prevLow6);
-  const sweepSell = a.slice(-5).some((x) => x.high > prevHigh6 && x.close < prevHigh6);
+
+  const buySweep = recentSweep(a, 'BUY');
+  const sellSweep = recentSweep(a, 'SELL');
+  const sweepBuy = Boolean(buySweep && buySweep.confirmIndex === a.length - 1);
+  const sweepSell = Boolean(sellSweep && sellSweep.confirmIndex === a.length - 1);
 
   const zone = a.slice(-40, -1);
   const support = Math.min(...zone.map((x) => x.low));
@@ -187,28 +229,43 @@ function signalAt(index) {
 
   const bullContext = st1 !== 'BEARISH' && st15 !== 'BEARISH';
   const bearContext = st1 !== 'BULLISH' && st15 !== 'BULLISH';
-  const reversalBuy = sweepBuy && mssBuy;
-  const reversalSell = sweepSell && mssSell;
-  const continuationBuy = bullContext && (bosBuy || mssBuy);
-  const continuationSell = bearContext && (bosSell || mssSell);
-  const rejectionBuy = supportReject && (mssBuy || sweepBuy || displacement);
-  const rejectionSell = resistanceReject && (mssSell || sweepSell || displacement);
+
+  // Direction is now selected by independent directional evidence instead of
+  // BUY-first precedence. If both sides qualify, the stronger side wins only
+  // when the difference is meaningful; otherwise we stay flat.
+  const buyReversal = Boolean(buySweep && (buySweep.mss || buySweep.bos));
+  const sellReversal = Boolean(sellSweep && (sellSweep.mss || sellSweep.bos));
+  const buyContinuation = bullContext && bosBuy && displacement;
+  const sellContinuation = bearContext && bosSell && displacement;
+  const buyRejection = supportReject && (sweepBuy || mssBuy) && displacement;
+  const sellRejection = resistanceReject && (sweepSell || mssSell) && displacement;
+
+  const buyEvidence = [buyReversal, buyContinuation, buyRejection, mssBuy, bosBuy, sweepBuy].filter(Boolean).length;
+  const sellEvidence = [sellReversal, sellContinuation, sellRejection, mssSell, bosSell, sweepSell].filter(Boolean).length;
 
   let direction = null;
   let setup = '';
-  if (reversalBuy || rejectionBuy || continuationBuy) {
+  if (buyReversal || buyContinuation || buyRejection) {
     direction = 'BUY';
-    setup = reversalBuy ? 'LIQUIDITY_SWEEP_MSS' : rejectionBuy ? 'SUPPORT_REJECTION' : 'STRUCTURE_CONTINUATION';
-  } else if (reversalSell || rejectionSell || continuationSell) {
-    direction = 'SELL';
-    setup = reversalSell ? 'LIQUIDITY_SWEEP_MSS' : rejectionSell ? 'RESISTANCE_REJECTION' : 'STRUCTURE_CONTINUATION';
-  } else return null;
+    setup = buyReversal ? 'LIQUIDITY_SWEEP_MSS' : buyRejection ? 'SUPPORT_REJECTION' : 'STRUCTURE_CONTINUATION';
+  }
+  if (sellReversal || sellContinuation || sellRejection) {
+    if (!direction || sellEvidence > buyEvidence) {
+      direction = 'SELL';
+      setup = sellReversal ? 'LIQUIDITY_SWEEP_MSS' : sellRejection ? 'RESISTANCE_REJECTION' : 'STRUCTURE_CONTINUATION';
+    } else if (sellEvidence === buyEvidence) {
+      // Conflicting directional evidence is not a trade.
+      return null;
+    }
+  }
+  if (!direction) return null;
 
   const sweep = direction === 'BUY' ? sweepBuy : sweepSell;
   const mss = direction === 'BUY' ? mssBuy : mssSell;
   const bos = direction === 'BUY' ? bosBuy : bosSell;
   const context = direction === 'BUY' ? bullContext : bearContext;
   const rejection = direction === 'BUY' ? supportReject : resistanceReject;
+  const sweepData = direction === 'BUY' ? buySweep : sellSweep;
   const ob = detectOrderBlock(a, direction);
   const fvg = detectFvg(a, direction);
   const fibData = fib(a);
@@ -221,14 +278,11 @@ function signalAt(index) {
   if (displacement) score += 1;
   if (context) score += 1;
   if (rejection) score += 1;
-  if (ob) score += 1;
-  if (fvg) score += 1;
   if (fibMatch) score += fibMatch.dist <= Math.max((fibData?.range || 0) * 0.03, 0.25) ? 2 : 1;
   score = Math.min(MAX_SCORE, score);
 
-  const triggerCount = Number(mss) + Number(bos) + Number(sweep) + Number(rejection);
-  const strongTrigger = (sweep && mss) || (bos && displacement) || (rejection && (mss || sweep));
-  if (triggerCount < 2 && !strongTrigger) return null;
+  const primaryTrigger = Boolean(sweepData && (sweepData.mss || sweepData.bos)) || Boolean(bos && displacement) || Boolean(rejection && (mss || sweep) && displacement);
+  if (!primaryTrigger) return null;
   if (score < MIN_SCORE) return null;
 
   const entry = c.close;
