@@ -1,14 +1,11 @@
 const fs=require('fs');
 const TOKEN=process.env.TELEGRAM_TOKEN,CHAT=process.env.TELEGRAM_CHAT_ID,FILE='./xauusd_m5.json',STATE='./state_v2.json';
 const MIN_SCORE=7,MAX_SCORE=10,FIBS=[0.236,0.382,0.5,0.618,0.65,0.705,0.786,0.886];
-const load=(f,d)=>{try{return fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):d}catch{return d}};
-const save=(f,x)=>fs.writeFileSync(f,JSON.stringify(x,null,2));
+const load=(f,d)=>{try{return fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):d}catch{return d}};const save=(f,x)=>fs.writeFileSync(f,JSON.stringify(x,null,2));
 const normalizeTs=ts=>{let x=Number(ts);if(!Number.isFinite(x))return null;if(x<1e11)x*=1000;return x};
 const candles=load(FILE,[]).map(c=>({time:normalizeTs(c.time??c.openTime),open:+c.open,high:+c.high,low:+c.low,close:+c.close,volume:+c.volume||0,isOpen:c.isOpen===true})).filter(c=>c.time&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
 if(candles.length<1200)throw Error(`Need >=1200 M5 candles, got ${candles.length}`);
-const closed=candles.filter(c=>!c.isOpen),latest=closed.at(-1),NOW=Date.now(),MAX_AGE=20*60*1000;
-if(!latest)process.exit(0);
-if(NOW-latest.time<0||NOW-latest.time>MAX_AGE){console.log(`STALE DATA: latest closed candle ${new Date(latest.time).toISOString()}, age ${Math.round((NOW-latest.time)/60000)}m`);process.exit(0)}
+const closed=candles.filter(c=>!c.isOpen),latest=closed.at(-1),NOW=Date.now(),MAX_AGE=20*60*1000;if(!latest)process.exit(0);if(NOW-latest.time<0||NOW-latest.time>MAX_AGE){console.log(`STALE DATA: latest closed candle ${new Date(latest.time).toISOString()}, age ${Math.round((NOW-latest.time)/60000)}m`);process.exit(0)}
 console.log(`ANALYSIS LATEST: ${new Date(latest.time).toISOString()} | age=${Math.round((NOW-latest.time)/60000)}m | closed=true`);
 function agg(a,min){const step=min*60000,o=[];for(const c of a){const t=Math.floor(c.time/step)*step,x=o.at(-1);if(!x||x.time!==t)o.push({time:t,open:c.open,high:c.high,low:c.low,close:c.close,volume:c.volume});else{x.high=Math.max(x.high,c.high);x.low=Math.min(x.low,c.low);x.close=c.close;x.volume+=c.volume}}return o}
 function ema(a,n){if(a.length<n)return null;let e=a[0].close,k=2/(n+1);for(let i=1;i<a.length;i++)e+=(a[i].close-e)*k;return e}
@@ -20,17 +17,16 @@ function fib(a){const s=swings(a.slice(-160)),hs=s.filter(x=>x.type==='H'),ls=s.
 function bestFib(f,p,atrv,dir){const candidates=FIBS.map(x=>({level:x,price:f.levels[x],dist:Math.abs(p-f.levels[x])})).filter(x=>x.dist<=atrv*.8);if(!candidates.length)return null;const directional=candidates.filter(x=>dir==='BUY'?x.price<=p:x.price>=p);return(directional.length?directional:candidates).sort((a,b)=>a.dist-b.dist)[0]}
 function signalAt(i){const a=closed.slice(0,i+1);if(a.length<120)return null;const m15=agg(a,15),h1=agg(a,60),h4=agg(a,240),c=a.at(-1),atrv=atr(a);if(h1.length<50||h4.length<20||!atrv)return null;const t4=trend(h4),t1=trend(h1),t15=trend(m15),st4=structureTrend(h4),st1=structureTrend(h1),st15=structureTrend(m15),prev=a.slice(-7,-1),ph=Math.max(...prev.map(x=>x.high)),pl=Math.min(...prev.map(x=>x.low)),range=Math.max(c.high-c.low,1e-9),body=Math.abs(c.close-c.open),disp=body/range>=.5&&range>=atrv*.65,bb=c.close>ph,bs=c.close<pl,swb=a.slice(-5).some(x=>x.low<pl&&x.close>pl),sws=a.slice(-5).some(x=>x.high>ph&&x.close<ph),z=a.slice(-40,-1),support=Math.min(...z.map(x=>x.low)),resistance=Math.max(...z.map(x=>x.high)),nearS=Math.abs(c.low-support)<=atrv*.5||(c.low<=support+atrv*.25&&c.close>support),nearR=Math.abs(c.high-resistance)<=atrv*.5||(c.high>=resistance-atrv*.25&&c.close<resistance),rejB=nearS&&c.close>c.open&&c.close>support,rejS=nearR&&c.close<c.open&&c.close<resistance,q=a.slice(-4,-1),mssB=c.close>Math.max(...q.map(x=>x.high)),mssS=c.close<Math.min(...q.map(x=>x.low));
 const tb=st4==='BULLISH'&&st1!=='BEARISH'&&st15!=='BEARISH',tr=st4==='BEARISH'&&st1!=='BULLISH'&&st15!=='BULLISH';const emaBull=t4==='BULLISH'&&t1!=='BEARISH',emaBear=t4==='BEARISH'&&t1!=='BULLISH';let dir=null,score=0,setup='';
-if(tb&&(bb||swb)){dir='BUY';setup='TREND';score=5+(bb?2:0)+(swb?1:0)+(disp?1:0)+(mssB?1:0)+(emaBull?1:0)}
-else if(tr&&(bs||sws)){dir='SELL';setup='TREND';score=5+(bs?2:0)+(sws?1:0)+(disp?1:0)+(mssS?1:0)+(emaBear?1:0)}
+// MSS is an explicit SMC trigger. It is allowed with aligned higher-timeframe structure; Fib and EMA remain confirmations, not mandatory gates.
+if(tb&&(bb||swb||mssB)){dir='BUY';setup='TREND';score=5+(bb?2:0)+(swb?1:0)+(mssB?1:0)+(disp?1:0)+(emaBull?1:0)}
+else if(tr&&(bs||sws||mssS)){dir='SELL';setup='TREND';score=5+(bs?2:0)+(sws?1:0)+(mssS?1:0)+(disp?1:0)+(emaBear?1:0)}
 else if(rejB&&(mssB||disp)){dir='BUY';setup='SUPPORT_REJECTION';score=5+(mssB?2:0)+(disp?1:0)+(tb?1:0)+(emaBull?1:0)}
 else if(rejS&&(mssS||disp)){dir='SELL';setup='RESISTANCE_REJECTION';score=5+(mssS?2:0)+(disp?1:0)+(tr?1:0)+(emaBear?1:0)}
 else return null;
-const ff=fib(a),f=ff?bestFib(ff,c.close,atrv,dir):null;let fibScore=0;if(f){fibScore=f.dist<=atrv*.3?2:1;if([.618,.65,.705,.786,.886].includes(f.level))fibScore++;score+=fibScore}
-if((setup==='SUPPORT_REJECTION'||setup==='RESISTANCE_REJECTION')&&f&&[.236,.382].includes(f.level))score=Math.min(score,8);
-if(score<MIN_SCORE)return null;score=Math.min(MAX_SCORE,score);const entry=c.close,swingL=Math.min(...a.slice(-12).map(x=>x.low)),swingH=Math.max(...a.slice(-12).map(x=>x.high));let risk=dir==='BUY'?entry-swingL:swingH-entry;risk=Math.max(atrv*.7,Math.min(atrv*2.2,risk));const sl=dir==='BUY'?entry-risk:entry+risk;return{direction:dir,setup,entry,sl,tp1:dir==='BUY'?entry+risk:entry-risk,tp2:dir==='BUY'?entry+2*risk:entry-2*risk,score,candleTime:c.time,h4:st4,h1:st1,m15:st15,emaH4:t4,emaH1:t1,emaM15:t15,breakout:dir==='BUY'?bb:bs,sweep:dir==='BUY'?swb:sws,displacement:disp,mss:dir==='BUY'?mssB:mssS,fib:f,fibLevel:f?.level??null,atr:atrv};}
-// Evaluate the newest 3 closed M5 candles. A valid setup on the immediately preceding candle must not be lost simply because the next candle did not itself qualify.
+const ff=fib(a),f=ff?bestFib(ff,c.close,atrv,dir):null;let fibScore=0;if(f){fibScore=f.dist<=atrv*.3?2:1;if([.618,.65,.705,.786,.886].includes(f.level))fibScore++;score+=fibScore}if((setup==='SUPPORT_REJECTION'||setup==='RESISTANCE_REJECTION')&&f&&[.236,.382].includes(f.level))score=Math.min(score,8);if(score<MIN_SCORE)return null;score=Math.min(MAX_SCORE,score);
+const entry=c.close,swingL=Math.min(...a.slice(-12).map(x=>x.low)),swingH=Math.max(...a.slice(-12).map(x=>x.high));let risk=dir==='BUY'?entry-swingL:swingH-entry;risk=Math.max(atrv*.7,Math.min(atrv*2.2,risk));const sl=dir==='BUY'?entry-risk:entry+risk;return{direction:dir,setup,entry,sl,tp1:dir==='BUY'?entry+risk:entry-risk,tp2:dir==='BUY'?entry+2*risk:entry-2*risk,score,candleTime:c.time,h4:st4,h1:st1,m15:st15,emaH4:t4,emaH1:t1,emaM15:t15,breakout:dir==='BUY'?bb:bs,sweep:dir==='BUY'?swb:sws,displacement:disp,mss:dir==='BUY'?mssB:mssS,fib:f,fibLevel:f?.level??null,atr:atrv}}
 let s=null;for(let i=closed.length-1;i>=Math.max(0,closed.length-3);i--){const candidate=signalAt(i);if(candidate&&NOW-candidate.candleTime<=15*60*1000){s=candidate;break}}
-if(!s){console.log('NO CURRENT QUALIFYING SIGNAL (checked latest 3 closed M5 candles)');process.exit(0)}
+if(!s){console.log('NO CURRENT QUALIFYING SIGNAL (latest 3 closed M5; MSS trigger enabled)');process.exit(0)}
 console.log(`QUALIFYING SIGNAL: ${s.direction} ${s.setup} score=${s.score}/10 candle=${new Date(s.candleTime).toISOString()}`);
 const state=load(STATE,{}),key=`${s.direction}|${s.setup}|${s.candleTime}|${s.entry.toFixed(2)}`;if(state.lastSignalKey===key){console.log('DUPLICATE SIGNAL — not sent');process.exit(0)}
 function iranTime(ts){return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(normalizeTs(ts)))}
