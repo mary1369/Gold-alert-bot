@@ -5,7 +5,7 @@
   "main": "server_v4.js",
   "scripts": {
     "start": "node server_v4.js",
-    "check": "node --check server_v4.js && node --check orderflow_gate.js && node --check scripts/fetch_xau_history.js && node --check scripts/parse_yahoo_xau.js"
+    "check": "node --check server_v4.js && node --check server_v5.js && node --check server_v6.js && node --check orderflow_gate.js && node --check scripts/fetch_xau_history.js && node --check scripts/parse_yahoo_xau.js"
   },
   "engines": {
     "node": ">=18"
