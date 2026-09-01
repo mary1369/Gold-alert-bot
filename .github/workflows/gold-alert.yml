@@ -60,15 +60,10 @@ jobs:
           node - <<'NODE'
           const x = require('./xauusd_m5.json');
           const latest = x?.at?.(-1)?.time;
-          const h = new Date().getUTCHours();
-          const minute = latest ? new Date(latest).getUTCMinutes() : -1;
           const age = latest ? Date.now() - latest : NaN;
-          const rolloverGap = minute >= 58 && age >= 0 && age <= 90 * 60 * 1000;
-          const marketBreak = h === 21;
-          const maxAge = (marketBreak || rolloverGap) ? 90 * 60 * 1000 : 20 * 60 * 1000;
           if (!Array.isArray(x) || x.length < 1200) throw new Error(`Invalid M5 history: ${x?.length || 0}`);
-          if (!Number.isFinite(age) || age < 0 || age > maxAge) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m (max ${Math.round(maxAge/60000)}m)`);
-          console.log(`Validated ${x.length} M5 bars; latest=${new Date(latest).toISOString()}; marketBreak=${marketBreak}; rolloverGap=${rolloverGap}`);
+          if (!Number.isFinite(age) || age < 0 || age > 20 * 60 * 1000) throw new Error(`Stale M5 data: ${Math.round(age/60000)}m`);
+          console.log(`Validated ${x.length} M5 bars; latest=${new Date(latest).toISOString()}`);
           NODE
 
       - name: Detect XAUUSD market session
@@ -108,13 +103,37 @@ jobs:
         run: |
           npm run check
           node --check server_v5.js
+          node --check server_v6.js
 
-      - name: Run XAUUSD V5 analysis
+      - name: Double-check SMC decision before Telegram
+        if: env.XAUUSD_MARKET_OPEN != '0'
+        env:
+          SIGNAL_DRY_RUN: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node server_v6.js > /tmp/smc_check_1.log
+          node server_v6.js > /tmp/smc_check_2.log
+          echo '--- SMC check #1 ---'
+          cat /tmp/smc_check_1.log
+          echo '--- SMC check #2 ---'
+          cat /tmp/smc_check_2.log
+          s1=$(grep '^QUALIFYING SIGNAL:' /tmp/smc_check_1.log || true)
+          s2=$(grep '^QUALIFYING SIGNAL:' /tmp/smc_check_2.log || true)
+          if [ -n "$s1" ] || [ -n "$s2" ]; then
+            [ -n "$s1" ] && [ -n "$s2" ] || { echo 'Inconsistent SMC result; Telegram blocked.'; exit 1; }
+            [ "$s1" = "$s2" ] || { echo 'SMC checks disagree; Telegram blocked.'; exit 1; }
+            echo 'SMC decision is deterministic and identical across both checks.'
+          else
+            echo 'Both SMC checks agree: no qualifying signal.'
+          fi
+
+      - name: Run XAUUSD V6 analysis and Telegram
         if: env.XAUUSD_MARKET_OPEN != '0'
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node server_v5.js
+        run: node server_v6.js
 
       - name: Commit state and refreshed candles
         if: always()
@@ -127,6 +146,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No state changes to commit.'
           else
-            git commit -m 'update XAUUSD V5 state [skip ci]'
+            git commit -m 'update XAUUSD V6 state [skip ci]'
             git push
           fi
