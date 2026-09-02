@@ -32,8 +32,7 @@ function simulate(d, engine, start=300) {
     const sig=engine.analyze();
     if(!sig){i++;continue;}
     signals++;
-    const entry=d[i+1]?.open;
-    const risk=Math.abs(entry-sig.sl);
+    const entry=d[i+1]?.open, risk=Math.abs(entry-sig.sl);
     if(!(risk>0)){i++;continue;}
     const tp1=sig.tp1, tp2=sig.tp2;
     let outcome='OPEN', exit=d.at(-1).close, bars=0, tp1Hit=false;
@@ -61,7 +60,7 @@ function simulate(d, engine, start=300) {
 }
 
 (async()=>{try{
-  const days=180;
+  const days=Number(process.env.BT_DAYS||180);
   const d=await loadData(days);
   if(d.length<1000) throw Error(`Insufficient XAUUSD M5 candles: ${d.length}`);
   const engine=loadV6Engine(d.slice(0,1200));
