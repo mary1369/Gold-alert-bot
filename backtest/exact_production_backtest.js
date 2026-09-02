@@ -16,7 +16,7 @@ function loadProductionAnalyze() {
   const cut = src.indexOf('(async()=>{');
   if (cut < 0) throw new Error('Cannot locate production runner in server.js');
   const pure = src.slice(0, cut);
-  const context = { require };
+  const context = { require, process: { env: {} } };
   vm.createContext(context);
   vm.runInContext(pure + '\nthis.__production = { normalize, analyze };', context, { filename:'server.js' });
   return context.__production.analyze;
@@ -25,13 +25,10 @@ function loadProductionAnalyze() {
 function simulate(d, analyze, start=100) {
   const trades=[]; let i=start, signals=0;
   while(i<d.length-10){
-    const closed=d.slice(0,i+1);
-    const sig=analyze(closed);
+    const sig=analyze(d.slice(0,i+1));
     if(!sig){i++;continue}
     signals++;
-    const entryBar=d[i+1];
-    const entry=entryBar.open;
-    const risk=Math.abs(entry-sig.sl);
+    const entry=d[i+1].open, risk=Math.abs(entry-sig.sl);
     if(!(risk>0)){i++;continue}
     const tp2=sig.direction==='BUY'?entry+2*risk:entry-2*risk;
     let outcome='OPEN',exit=d.at(-1).close,bars=0;
@@ -56,14 +53,4 @@ function simulate(d, analyze, start=100) {
   return {signals,trades:trades.length,wins:wins.length,losses:losses.length,winRate:trades.length?wins.length/trades.length:0,netR:+netR.toFixed(3),profitFactor:+(grossWin/(grossLoss||1)).toFixed(3),maxDrawdownR:+maxDD.toFixed(3),avgR:+(netR/(trades.length||1)).toFixed(3),details:trades};
 }
 
-(async()=>{
-  try{
-    const d=await load();
-    if(d.length<1000) throw new Error(`Insufficient XAUUSD M5 candles: ${d.length}`);
-    const analyze=loadProductionAnalyze();
-    const result=simulate(d,analyze,100);
-    const out={source:'Dukascopy XAUUSD spot M5',candles:d.length,periodStart:d[0].time,periodEnd:d.at(-1).time,logicSource:'server.js production analyze() loaded directly; no reconstructed strategy',execution:'signal generated from closed M5 candle; entry at next M5 open; SL unchanged; TP2=2R; one position at a time',result};
-    fs.writeFileSync('backtest/exact_production_result.json',JSON.stringify(out,null,2));
-    console.log(JSON.stringify({...out,result:{...result,details:undefined}},null,2));
-  }catch(e){console.error(e);process.exit(1)}
-})();
+(async()=>{try{const d=await load();if(d.length<1000)throw Error(`Insufficient XAUUSD M5 candles: ${d.length}`);const analyze=loadProductionAnalyze();const result=simulate(d,analyze,100);const out={source:'Dukascopy XAUUSD spot M5',candles:d.length,periodStart:d[0].time,periodEnd:d.at(-1).time,logicSource:'server.js production analyze() loaded directly; no reconstructed strategy',execution:'closed M5 signal; next M5 open entry; unchanged SL; TP2=2R; one position at a time',result};fs.writeFileSync('backtest/exact_production_result.json',JSON.stringify(out,null,2));console.log(JSON.stringify({...out,result:{...result,details:undefined}},null,2));}catch(e){console.error(e);process.exit(1)}})();
