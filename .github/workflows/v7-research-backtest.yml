@@ -6,13 +6,15 @@ on:
     paths:
       - 'server_v6.js'
       - 'backtest/v7_research_backtest.js'
+      - 'backtest/v7_two_path_engine.js'
+      - 'backtest/v7_two_path_backtest.js'
       - '.github/workflows/v7-research-backtest.yml'
   workflow_dispatch:
 
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,12 +22,12 @@ jobs:
           node-version: 20
       - name: Install Dukascopy dependency
         run: npm install dukascopy-node
-      - name: Run V7 research backtest
-        run: node backtest/v7_research_backtest.js
+      - name: Run V7 two-path IS/OOS backtest
+        run: node backtest/v7_two_path_backtest.js
         env:
           BT_DAYS: 180
       - name: Upload V7 result
         uses: actions/upload-artifact@v4
         with:
-          name: v7-research-result
-          path: backtest/v7_research_result.json
+          name: v7-two-path-result
+          path: backtest/v7_two_path_result.json
