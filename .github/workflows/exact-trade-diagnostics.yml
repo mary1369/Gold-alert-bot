@@ -1,4 +1,5 @@
 name: Exact Trade Diagnostics
+
 on:
   push:
     paths:
@@ -6,6 +7,10 @@ on:
       - 'server.js'
       - '.github/workflows/exact-trade-diagnostics.yml'
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   diagnostics:
     runs-on: ubuntu-latest
