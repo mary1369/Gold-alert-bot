@@ -1,0 +1,28 @@
+name: Exact V6 Research Backtest
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backtest/exact_v6_backtest.js'
+      - 'server_v6.js'
+      - '.github/workflows/exact-v6-backtest.yml'
+permissions:
+  contents: write
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Dukascopy dependency
+        run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run exact V6 backtest
+        run: node backtest/exact_v6_backtest.js
+      - name: Upload exact V6 result
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-v6-backtest-result
+          path: backtest/exact_v6_result.json
