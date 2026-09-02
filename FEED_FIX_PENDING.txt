@@ -1,0 +1,1 @@
+Temporary marker: feed freshness gate is being corrected so a current direct XAU/USD feed is not rejected because its retained window starts earlier than 48 hours. Remove after verification.
