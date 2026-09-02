@@ -1,21 +1,13 @@
 const fs=require('fs');
+const {getHistoricalRates}=require('dukascopy-node');
 const {evaluate:v4Evaluate}=require('../engine/v4_victoria_hybrid');
 
-// Yahoo's XAUUSD=X feed currently returns 404. GC=F is used as a transparent
-// gold-futures proxy for historical testing; production remains XAUUSD.
-const URL='https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=5m&range=5d&events=div%2Csplits';
-
 async function load(){
-  const r=await fetch(URL,{headers:{'User-Agent':'Mozilla/5.0 Chrome/120.0'}});
-  if(!r.ok)throw Error(`Yahoo HTTP ${r.status}`);
-  const j=await r.json(),z=j.chart?.result?.[0];
-  if(!z?.timestamp?.length)throw Error('No gold proxy candles');
-  const q=z.indicators.quote[0],a=[];
-  for(let i=0;i<z.timestamp.length;i++){
-    const o=+q.open[i],h=+q.high[i],l=+q.low[i],c=+q.close[i];
-    if([o,h,l,c].every(Number.isFinite))a.push({time:z.timestamp[i]*1000,open:o,high:h,low:l,close:c});
-  }
-  if(a.length<200)throw Error(`Insufficient 5m candles: ${a.length}`);
+  const to=new Date();
+  const from=new Date(to.getTime()-7*24*60*60*1000);
+  const raw=await getHistoricalRates({instrument:'xauusd',dates:{from,to},timeframe:'m5',format:'json'});
+  const a=raw.map(x=>({time:+x.timestamp,open:+x.open,high:+x.high,low:+x.low,close:+x.close})).filter(x=>[x.time,x.open,x.high,x.low,x.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
+  if(a.length<200)throw Error(`Insufficient XAUUSD M5 candles: ${a.length}`);
   return a;
 }
 
@@ -36,14 +28,14 @@ function fibLevels(d,dir){const s=structure(d);if(!s)return null;const hi=s.h2.p
 function fibConfluence(d,dir){const f=fibLevels(d,dir);if(!f)return{ok:false};const c=d.at(-1),tol=f.range*.08;let best=Infinity,near=null;for(const x of [.236,.382,.5,.618,.705,.786]){const dist=Math.abs(c.close-f.levels[x]);if(dist<best){best=dist;near=x}}return{ok:best<=tol,near,levels:f.levels}}
 function inZone(c,z){return z&&c.high>=z.low&&c.low<=z.high}
 
-// Mirrors the active server.js baseline logic, but without Telegram/network side effects.
+// Baseline mirrors the active server.js signal rules without Telegram/network side effects.
 function baseline(d){
   if(d.length<80)return null;const c=d.at(-1),p=d.at(-2),s=structure(d),a=atr(d);if(!s||!a)return null;
   const m15=m15Trend(d);let dir=null;if(s.trend==='BULLISH'&&m15!=='BEARISH')dir='BUY';if(s.trend==='BEARISH'&&m15!=='BULLISH')dir='SELL';if(!dir)return null;
   const b=bos(d,s,dir),sw=sweep(c,s,dir),o=ob(d,dir),f=fvg(d,dir),z=f||o,ret=inZone(c,z),conf=confirm(c,p,dir),disp=(c.high-c.low)>=a*.8&&body(c)/(c.high-c.low||1)>=.5,fib=fibConfluence(d,dir);
   let score=0;if(b)score+=2;if(sw)score+=2;if(f)score+=2;if(o)score++;if(ret)score+=2;if(conf)score++;if(disp)score++;if((dir==='BUY'&&m15==='BULLISH')||(dir==='SELL'&&m15==='BEARISH'))score+=2;if(fib.ok)score++;
   if(score<8||(!b&&!sw)||!z||!ret||!conf||!disp)return null;
-  const sl=dir==='BUY'?Math.min(z.low,s.l2.p)-a*.15:Math.max(z.high,s.h2.p)+a*.15,entry=c.close,risk=Math.abs(entry-sl);if(risk<a*.45||risk>a*2.5)return null;
+  const sl=dir==='BUY'?Math.min(z.low,s.l2.p)-a*.15:Math.max(z.high,s.h2.p)+a*.15,entry:c.close,risk=Math.abs(entry-sl);if(risk<a*.45||risk>a*2.5)return null;
   return{direction:dir,entry,sl,risk,tp2:dir==='BUY'?entry+2*risk:entry-2*risk,score,candleTime:c.time};
 }
 
@@ -66,7 +58,7 @@ function simulate(d,evaluator,start=100){
   const d=await load();
   const baselineResult=simulate(d,baseline,100);
   const v4Result=simulate(d,v4Evaluate,100);
-  const result={source:'Yahoo Finance GC=F 5m gold-futures proxy (XAUUSD=X returned HTTP 404)',periodStart:d[0].time,periodEnd:d.at(-1).time,candles:d.length,exitModel:'one position at a time; SL vs TP2, same for both engines',baseline:baselineResult,v4:v4Result,comparison:{winRateDelta:+(v4Result.winRate-baselineResult.winRate).toFixed(4),netRDelta:+(v4Result.netR-baselineResult.netR).toFixed(3),profitFactorDelta:+(v4Result.profitFactor-baselineResult.profitFactor).toFixed(3),drawdownDelta:+(v4Result.maxDrawdownR-baselineResult.maxDrawdownR).toFixed(3),tradeCountDelta:v4Result.trades-baselineResult.trades}};
+  const result={source:'Dukascopy XAUUSD spot M5',periodStart:d[0].time,periodEnd:d.at(-1).time,candles:d.length,exitModel:'one position at a time; SL vs TP2, identical for both engines',baseline:baselineResult,v4:v4Result,comparison:{winRateDelta:+(v4Result.winRate-baselineResult.winRate).toFixed(4),netRDelta:+(v4Result.netR-baselineResult.netR).toFixed(3),profitFactorDelta:+(v4Result.profitFactor-baselineResult.profitFactor).toFixed(3),drawdownDelta:+(v4Result.maxDrawdownR-baselineResult.maxDrawdownR).toFixed(3),tradeCountDelta:v4Result.trades-baselineResult.trades}};
   fs.mkdirSync('backtest',{recursive:true});fs.writeFileSync('backtest/v4_result.json',JSON.stringify(result,null,2));
   console.log(JSON.stringify({...result,baseline:{...baselineResult,details:undefined},v4:{...v4Result,details:undefined}},null,2));
 }catch(e){console.error(e);process.exit(1)}})();
