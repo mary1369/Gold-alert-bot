@@ -1,0 +1,25 @@
+name: Exact Production Backtest
+on:
+  push:
+    paths:
+      - 'backtest/exact_production_backtest.js'
+      - 'server.js'
+      - '.github/workflows/exact-production-backtest.yml'
+  workflow_dispatch:
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Dukascopy dependency
+        run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run exact production backtest
+        run: node backtest/exact_production_backtest.js
+      - name: Upload exact result
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-production-backtest-result
+          path: backtest/exact_production_result.json
