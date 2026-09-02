@@ -32,3 +32,5 @@ jobs:
           git add backtest/v71_result.json
           git diff --cached --quiet || git commit -m 'persist V7.1 IS OOS result [skip ci]'
           git push
+
+# validation rerun trigger
