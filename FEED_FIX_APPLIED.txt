@@ -1,0 +1,1 @@
+The direct XAU/USD freshness validation is based on the newest direct spot bar. Historical depth is validated separately.
