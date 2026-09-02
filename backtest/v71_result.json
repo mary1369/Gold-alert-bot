@@ -1,0 +1,56 @@
+{
+  "strategy": "V7.1",
+  "model": "Raid/Sweep -> MSS -> displacement -> fresh FVG -> 0.705/0.786 OTE",
+  "source": "Dukascopy XAUUSD M5",
+  "candles": 6072,
+  "periodStart": 1785772800000,
+  "periodEnd": 1788364500000,
+  "split": "first 2/3 IS; final 1/3 OOS; OOS untouched by rules",
+  "gates": [
+    "M15 neutral blocked",
+    "HTF directional alignment mandatory",
+    "liquidity sweep mandatory",
+    "MSS within 3 M5 candles",
+    "fresh FVG mandatory",
+    "entry must overlap fresh FVG",
+    "0.705/0.786 OTE mandatory (0.618 rejected)",
+    "RSI BUY 50-68 / SELL 32-50",
+    "displacement body >=60% and range >=1 ATR",
+    "displacement age <=2 candles",
+    "SL beyond sweep/FVG + 0.2 ATR",
+    "risk 0.5-1.8 ATR"
+  ],
+  "IS": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "winRate": 0,
+    "netR": 0,
+    "profitFactor": 0,
+    "maxDrawdownR": 0,
+    "avgR": 0,
+    "details": []
+  },
+  "OOS": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "winRate": 0,
+    "netR": 0,
+    "profitFactor": 0,
+    "maxDrawdownR": 0,
+    "avgR": 0,
+    "details": []
+  },
+  "ALL": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "winRate": 0,
+    "netR": 0,
+    "profitFactor": 0,
+    "maxDrawdownR": 0,
+    "avgR": 0,
+    "details": []
+  }
+}
