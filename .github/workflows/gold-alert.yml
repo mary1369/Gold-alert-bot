@@ -31,6 +31,21 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Patch feed freshness validation for current direct spot feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = 'scripts/fetch_xau_history.js';
+          let s = fs.readFileSync(p, 'utf8');
+          const old = "const directFresh=rows=>{const d=direct(rows);if(!d.length)return false;const age=NOW-Date.parse(d.at(-1).openTime);return age>=0&&age<=MAX_AGE&&NOW-Date.parse(d[0].openTime)<=DIRECT_WINDOW;};";
+          const fixed = "const directFresh=rows=>{const d=direct(rows);if(!d.length)return false;const latest=Date.parse(d.at(-1).openTime);const age=NOW-latest;return age>=0&&age<=MAX_AGE;};";
+          if (!s.includes(old)) throw new Error('Expected feed freshness gate was not found; refusing to patch.');
+          fs.writeFileSync(p, s.replace(old, fixed));
+          console.log('Applied direct-spot freshness fix in workflow workspace.');
+          NODE
+
       - name: Validate Telegram secrets
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
