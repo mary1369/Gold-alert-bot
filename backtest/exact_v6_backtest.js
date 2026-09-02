@@ -11,25 +11,26 @@ async function loadData(days) {
     .sort((a,b)=>a.time-b.time);
 }
 
-function loadV6Analyze(data) {
+function loadV6Analyze(initialData) {
   let src = fs.readFileSync('server_v6.js', 'utf8');
   const marker = 'const candles = load(FILE, []).map';
   const start = src.indexOf(marker);
   const agg = src.indexOf('function aggregate', start);
   const runner = src.indexOf('const signal=analyze();');
   if (start < 0 || agg < 0 || runner < 0) throw new Error('Cannot locate V6 data/runner boundaries');
-  src = src.slice(0,start) + `const candles = __DATA;\nconst closed = candles;\nconst c = closed.at(-1);\nconst age = 0;\n` + src.slice(agg, runner);
-  src += '\nthis.__v6 = { analyze };';
-  const context = { require, process:{env:{}}, __DATA:data };
+  src = src.slice(0,start) + `let candles = __DATA;\nlet closed = candles;\nlet c = closed.at(-1);\nconst age = 0;\n` + src.slice(agg, runner);
+  src += '\nthis.__v6 = { analyze, setData: (d)=>{ candles=d; closed=d; c=d.at(-1); } };';
+  const context = { require, process:{env:{}}, __DATA:initialData };
   vm.createContext(context);
   vm.runInContext(src, context, {filename:'server_v6.js'});
-  return context.__v6.analyze;
+  return { analyze: context.__v6.analyze, setData: context.__v6.setData };
 }
 
-function simulate(d, analyze, start=300) {
+function simulate(d, engine, start=300) {
   const trades=[]; let i=start, signals=0;
   while(i<d.length-20){
-    const sig=analyze(d.slice(0,i+1));
+    engine.setData(d.slice(0,i+1));
+    const sig=engine.analyze();
     if(!sig){i++;continue;}
     signals++;
     const entry=d[i+1]?.open, risk=Math.abs(entry-sig.sl);
@@ -61,8 +62,8 @@ function simulate(d, analyze, start=300) {
   const days=180;
   const d=await loadData(days);
   if(d.length<1000) throw Error(`Insufficient XAUUSD M5 candles: ${d.length}`);
-  const analyze=loadV6Analyze(d.slice(0,1200));
-  const result=simulate(d, analyze, 300);
+  const engine=loadV6Analyze(d.slice(0,1200));
+  const result=simulate(d, engine, 300);
   const out={source:'Dukascopy XAUUSD spot M5',days,candles:d.length,periodStart:d[0].time,periodEnd:d.at(-1).time,logicSource:'server_v6.js production analyze() loaded directly; no reconstructed strategy',execution:'closed M5 signal; next M5 open entry; unchanged V6 SL; TP2=2R; one position at a time',result};
   fs.writeFileSync('backtest/exact_v6_result.json',JSON.stringify(out,null,2));
   console.log(JSON.stringify({...out,result:{...result,details:undefined}},null,2));
