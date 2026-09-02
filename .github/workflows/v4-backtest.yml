@@ -21,3 +21,4 @@ jobs:
         with:
           name: v4-backtest-result
           path: backtest/v4_result.json
+# forced run after workflow creation
