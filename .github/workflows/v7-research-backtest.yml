@@ -1,0 +1,31 @@
+name: V7 Research Backtest
+
+on:
+  push:
+    branches: [v7-research]
+    paths:
+      - 'server_v6.js'
+      - 'backtest/v7_research_backtest.js'
+      - '.github/workflows/v7-research-backtest.yml'
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Dukascopy dependency
+        run: npm install dukascopy-node
+      - name: Run V7 research backtest
+        run: node backtest/v7_research_backtest.js
+        env:
+          BT_DAYS: 180
+      - name: Upload V7 result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v7-research-result
+          path: backtest/v7_research_result.json
