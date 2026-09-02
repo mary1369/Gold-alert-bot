@@ -1,0 +1,27 @@
+name: V7 Candidate Backtest
+on:
+  push:
+    paths:
+      - 'backtest/v7_candidate_backtest.js'
+      - 'server.js'
+      - '.github/workflows/v7-candidate-backtest.yml'
+  workflow_dispatch:
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Dukascopy dependency
+        run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run V7 candidate backtest
+        run: node backtest/v7_candidate_backtest.js
+      - name: Persist result
+        run: |
+          git config user.name 'gold-alert-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add backtest/v7_candidate_result.json
+          git commit -m 'persist V7 candidate backtest result [skip ci]' || echo 'No result changes to commit.'
+          git push
