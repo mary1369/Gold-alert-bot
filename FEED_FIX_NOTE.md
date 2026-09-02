@@ -1,0 +1,1 @@
+Feed validation: direct XAU/USD freshness must be based on the newest direct bar, while historical depth is supplied separately by cached/proxy history.
