@@ -3,8 +3,8 @@
   "model": "Raid/Sweep -> MSS -> displacement -> fresh FVG -> 0.705/0.786 OTE",
   "source": "Dukascopy XAUUSD M5",
   "candles": 6072,
-  "periodStart": 1785772800000,
-  "periodEnd": 1788364500000,
+  "periodStart": 1785773100000,
+  "periodEnd": 1788364800000,
   "split": "first 2/3 IS; final 1/3 OOS; OOS untouched by rules",
   "gates": [
     "M15 neutral blocked",
