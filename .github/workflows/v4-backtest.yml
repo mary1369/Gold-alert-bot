@@ -14,7 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run 5-day gold M5 baseline vs V4 backtest
+      - name: Install backtest dependency
+        run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run 7-day XAUUSD M5 baseline vs V4 backtest
         run: node backtest/v4_backtest.js
       - name: Upload result
         uses: actions/upload-artifact@v4
