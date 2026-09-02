@@ -1,10 +1,11 @@
-name: V7 Candidate Backtest
+name: V7 Two-Path IS OOS Backtest
 
 on:
   push:
+    branches: [v7-research]
     paths:
-      - 'backtest/v7_candidate_backtest.js'
-      - 'server.js'
+      - 'backtest/v7_two_path_backtest.js'
+      - 'backtest/v7_two_path_engine.js'
       - '.github/workflows/v7-candidate-backtest.yml'
   workflow_dispatch:
 
@@ -14,6 +15,7 @@ permissions:
 jobs:
   backtest:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,12 +23,14 @@ jobs:
           node-version: 20
       - name: Install Dukascopy dependency
         run: npm install --no-audit --no-fund dukascopy-node@1.50.0
-      - name: Run V7 candidate backtest
-        run: node backtest/v7_candidate_backtest.js
+      - name: Run V7 two-path IS OOS backtest
+        run: node backtest/v7_two_path_backtest.js
+        env:
+          BT_DAYS: 180
       - name: Persist result
         run: |
           git config user.name 'gold-alert-bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add backtest/v7_candidate_result.json
-          git commit -m 'persist V7 candidate backtest result [skip ci]' || echo 'No result changes to commit.'
+          git add backtest/v7_two_path_result.json
+          git commit -m 'persist V7 two-path IS OOS result [skip ci]' || echo 'No result changes to commit.'
           git push
