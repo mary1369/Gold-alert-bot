@@ -16,7 +16,7 @@ function loadProductionAnalyze() {
   const cut = src.indexOf('(async()=>{');
   if (cut < 0) throw new Error('Cannot locate production runner in server.js');
   const pure = src.slice(0, cut);
-  const context = {};
+  const context = { require };
   vm.createContext(context);
   vm.runInContext(pure + '\nthis.__production = { normalize, analyze };', context, { filename:'server.js' });
   return context.__production.analyze;
