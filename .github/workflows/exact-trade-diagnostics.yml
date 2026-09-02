@@ -23,3 +23,10 @@ jobs:
         with:
           name: exact-trade-diagnostics
           path: backtest/exact_trade_diagnostics.json
+      - name: Persist diagnostics result
+        run: |
+          git config user.name 'gold-alert-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add backtest/exact_trade_diagnostics.json
+          git commit -m 'persist exact trade diagnostics [skip ci]' || echo 'No diagnostics changes to commit.'
+          git push
