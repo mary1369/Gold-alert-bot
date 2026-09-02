@@ -4,10 +4,10 @@ const {evaluate:v4Evaluate}=require('../engine/v4_victoria_hybrid');
 
 async function load(){
   const to=new Date();
-  const from=new Date(to.getTime()-7*24*60*60*1000);
+  const from=new Date(to.getTime()-30*24*60*60*1000);
   const raw=await getHistoricalRates({instrument:'xauusd',dates:{from,to},timeframe:'m5',format:'json'});
   const a=raw.map(x=>({time:+x.timestamp,open:+x.open,high:+x.high,low:+x.low,close:+x.close})).filter(x=>[x.time,x.open,x.high,x.low,x.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
-  if(a.length<200)throw Error(`Insufficient XAUUSD M5 candles: ${a.length}`);
+  if(a.length<1000)throw Error(`Insufficient XAUUSD M5 candles: ${a.length}`);
   return a;
 }
 function body(c){return Math.abs(c.close-c.open)}
@@ -32,20 +32,8 @@ function baseline(d){
   const b=bos(d,s,dir),sw=sweep(c,s,dir),o=ob(d,dir),f=fvg(d,dir),z=f||o,ret=inZone(c,z),conf=confirm(c,p,dir),disp=(c.high-c.low)>=a*.8&&body(c)/(c.high-c.low||1)>=.5,fib=fibConfluence(d,dir);
   let score=0;if(b)score+=2;if(sw)score+=2;if(f)score+=2;if(o)score++;if(ret)score+=2;if(conf)score++;if(disp)score++;if((dir==='BUY'&&m15==='BULLISH')||(dir==='SELL'&&m15==='BEARISH'))score+=2;if(fib.ok)score++;
   if(score<8||(!b&&!sw)||!z||!ret||!conf||!disp)return null;
-  const sl=dir==='BUY'?Math.min(z.low,s.l2.p)-a*.15:Math.max(z.high,s.h2.p)+a*.15;
-  const entry=c.close;
-  const risk=Math.abs(entry-sl);
-  if(risk<a*.45||risk>a*2.5)return null;
+  const sl=dir==='BUY'?Math.min(z.low,s.l2.p)-a*.15:Math.max(z.high,s.h2.p)+a*.15;const entry=c.close;const risk=Math.abs(entry-sl);if(risk<a*.45||risk>a*2.5)return null;
   return{direction:dir,entry,sl,risk,tp2:dir==='BUY'?entry+2*risk:entry-2*risk,score,candleTime:c.time};
 }
-function simulate(d,evaluator,start=100){
-  const trades=[];let i=start;let signals=0;
-  while(i<d.length-10){const sig=evaluator(d.slice(0,i+1));if(!sig){i++;continue}signals++;let outcome='OPEN',exit=d.at(-1).close,bars=0;
-    for(let j=i+1;j<d.length;j++){bars++;const c=d[j];if(sig.direction==='BUY'){if(c.low<=sig.sl){outcome='SL';exit=sig.sl;break}if(c.high>=sig.tp2){outcome='TP2';exit=sig.tp2;break}}else{if(c.high>=sig.sl){outcome='SL';exit=sig.sl;break}if(c.low<=sig.tp2){outcome='TP2';exit=sig.tp2;break}}}
-    if(outcome!=='OPEN'){const R=sig.direction==='BUY'?(exit-sig.entry)/sig.risk:(sig.entry-exit)/sig.risk;trades.push({...sig,outcome,R:+R.toFixed(3),bars});i+=Math.max(1,bars)}else break;
-  }
-  let eq=0,peak=0,maxDD=0;for(const t of trades){eq+=t.R;peak=Math.max(peak,eq);maxDD=Math.max(maxDD,peak-eq)}
-  const wins=trades.filter(x=>x.R>0),losses=trades.filter(x=>x.R<0),grossWin=wins.reduce((a,x)=>a+x.R,0),grossLoss=Math.abs(losses.reduce((a,x)=>a+x.R,0));
-  return{signals,trades:trades.length,wins:wins.length,losses:losses.length,winRate:+(trades.length?wins.length/trades.length:0).toFixed(4),netR:+eq.toFixed(3),profitFactor:+(grossWin/(grossLoss||1)).toFixed(3),maxDrawdownR:+maxDD.toFixed(3),avgR:+(trades.length?eq/trades.length:0).toFixed(3),details:trades};
-}
+function simulate(d,evaluator,start=100){const trades=[];let i=start,signals=0;while(i<d.length-10){const sig=evaluator(d.slice(0,i+1));if(!sig){i++;continue}signals++;let outcome='OPEN',exit=d.at(-1).close,bars=0;for(let j=i+1;j<d.length;j++){bars++;const c=d[j];if(sig.direction==='BUY'){if(c.low<=sig.sl){outcome='SL';exit=sig.sl;break}if(c.high>=sig.tp2){outcome='TP2';exit=sig.tp2;break}}else{if(c.high>=sig.sl){outcome='SL';exit=sig.sl;break}if(c.low<=sig.tp2){outcome='TP2';exit=sig.tp2;break}}}if(outcome!=='OPEN'){const R=sig.direction==='BUY'?(exit-sig.entry)/sig.risk:(sig.entry-exit)/sig.risk;trades.push({...sig,outcome,R:+R.toFixed(3),bars});i+=Math.max(1,bars)}else break}let eq=0,peak=0,maxDD=0;for(const t of trades){eq+=t.R;peak=Math.max(peak,eq);maxDD=Math.max(maxDD,peak-eq)}const wins=trades.filter(x=>x.R>0),losses=trades.filter(x=>x.R<0),grossWin=wins.reduce((a,x)=>a+x.R,0),grossLoss=Math.abs(losses.reduce((a,x)=>a+x.R,0));return{signals,trades:trades.length,wins:wins.length,losses:losses.length,winRate:+(trades.length?wins.length/trades.length:0).toFixed(4),netR:+eq.toFixed(3),profitFactor:+(grossWin/(grossLoss||1)).toFixed(3),maxDrawdownR:+maxDD.toFixed(3),avgR:+(trades.length?eq/trades.length:0).toFixed(3),details:trades}}
 (async()=>{try{const d=await load();const baselineResult=simulate(d,baseline,100);const v4Result=simulate(d,v4Evaluate,100);const result={source:'Dukascopy XAUUSD spot M5',periodStart:d[0].time,periodEnd:d.at(-1).time,candles:d.length,exitModel:'one position at a time; SL vs TP2, identical for both engines',baseline:baselineResult,v4:v4Result,comparison:{winRateDelta:+(v4Result.winRate-baselineResult.winRate).toFixed(4),netRDelta:+(v4Result.netR-baselineResult.netR).toFixed(3),profitFactorDelta:+(v4Result.profitFactor-baselineResult.profitFactor).toFixed(3),drawdownDelta:+(v4Result.maxDrawdownR-baselineResult.maxDrawdownR).toFixed(3),tradeCountDelta:v4Result.trades-baselineResult.trades}};fs.mkdirSync('backtest',{recursive:true});fs.writeFileSync('backtest/v4_result.json',JSON.stringify(result,null,2));console.log(JSON.stringify({...result,baseline:{...baselineResult,details:undefined},v4:{...v4Result,details:undefined}},null,2));}catch(e){console.error(e);process.exit(1)}})();
