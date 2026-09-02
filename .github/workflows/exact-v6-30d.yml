@@ -1,0 +1,26 @@
+name: Exact V6 30 Day Research Backtest
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backtest/exact_v6_backtest.js'
+      - 'server_v6.js'
+      - '.github/workflows/exact-v6-30d.yml'
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run exact V6 30-day backtest
+        env:
+          BT_DAYS: '30'
+        run: node backtest/exact_v6_backtest.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-v6-30d-result
+          path: backtest/exact_v6_result.json
