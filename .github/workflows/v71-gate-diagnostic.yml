@@ -1,0 +1,34 @@
+name: V7.1 Gate-by-Gate Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backtest/v71_gate_diagnostic.js'
+      - 'strategy_v71.js'
+      - '.github/workflows/v71-gate-diagnostic.yml'
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependency
+        run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run exact V7.1 gate diagnostic
+        run: node backtest/v71_gate_diagnostic.js
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: v71-gate-diagnostic
+          path: backtest/v71_gate_diagnostic.json
+      - name: Persist diagnostic
+        run: |
+          git config user.name 'gold-alert-bot'
+          git config user.email 'actions@github.com'
+          git add backtest/v71_gate_diagnostic.json
+          git diff --cached --quiet || git commit -m 'persist V7.1 gate diagnostic [skip ci]'
+          git push
