@@ -1,0 +1,243 @@
+{
+  "strategy": "V8.1",
+  "instrument": "XAUUSD",
+  "timeframe": "M5",
+  "source": "Dukascopy historical rates",
+  "candles": 69332,
+  "spread": 0.2,
+  "slippage": 0.1,
+  "maxHoldBars": 96,
+  "conservativeIntrabarRule": "If SL and TP are both touched in same M5 bar, count SL first",
+  "overlapRule": "No new signal until prior trade resolves",
+  "windows": [
+    {
+      "name": "IS",
+      "metrics": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "winRate": 0,
+        "netR": 0,
+        "profitFactor": 0,
+        "maxDrawdownR": 0,
+        "avgR": 0,
+        "maxConsecutiveLosses": 0,
+        "rDistribution": []
+      },
+      "byDirection": {
+        "BUY": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        },
+        "SELL": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        }
+      }
+    },
+    {
+      "name": "OOS",
+      "metrics": {
+        "trades": 4,
+        "wins": 2,
+        "losses": 2,
+        "winRate": 50,
+        "netR": 2,
+        "profitFactor": 2,
+        "maxDrawdownR": 1,
+        "avgR": 0.5,
+        "maxConsecutiveLosses": 1,
+        "rDistribution": [
+          -1,
+          2,
+          -1,
+          2
+        ]
+      },
+      "byDirection": {
+        "BUY": {
+          "trades": 4,
+          "wins": 2,
+          "losses": 2,
+          "winRate": 50,
+          "netR": 2,
+          "profitFactor": 2,
+          "maxDrawdownR": 1,
+          "avgR": 0.5,
+          "maxConsecutiveLosses": 1,
+          "rDistribution": [
+            -1,
+            2,
+            -1,
+            2
+          ]
+        },
+        "SELL": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        }
+      }
+    },
+    {
+      "name": "IS2",
+      "metrics": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "winRate": 0,
+        "netR": -1,
+        "profitFactor": 0,
+        "maxDrawdownR": 1,
+        "avgR": -1,
+        "maxConsecutiveLosses": 1,
+        "rDistribution": [
+          -1
+        ]
+      },
+      "byDirection": {
+        "BUY": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "winRate": 0,
+          "netR": -1,
+          "profitFactor": 0,
+          "maxDrawdownR": 1,
+          "avgR": -1,
+          "maxConsecutiveLosses": 1,
+          "rDistribution": [
+            -1
+          ]
+        },
+        "SELL": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        }
+      }
+    },
+    {
+      "name": "OOS2",
+      "metrics": {
+        "trades": 4,
+        "wins": 2,
+        "losses": 2,
+        "winRate": 50,
+        "netR": 2,
+        "profitFactor": 2,
+        "maxDrawdownR": 1,
+        "avgR": 0.5,
+        "maxConsecutiveLosses": 1,
+        "rDistribution": [
+          -1,
+          2,
+          -1,
+          2
+        ]
+      },
+      "byDirection": {
+        "BUY": {
+          "trades": 4,
+          "wins": 2,
+          "losses": 2,
+          "winRate": 50,
+          "netR": 2,
+          "profitFactor": 2,
+          "maxDrawdownR": 1,
+          "avgR": 0.5,
+          "maxConsecutiveLosses": 1,
+          "rDistribution": [
+            -1,
+            2,
+            -1,
+            2
+          ]
+        },
+        "SELL": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        }
+      }
+    },
+    {
+      "name": "ALL",
+      "metrics": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "winRate": 0,
+        "netR": 0,
+        "profitFactor": 0,
+        "maxDrawdownR": 0,
+        "avgR": 0,
+        "maxConsecutiveLosses": 0,
+        "rDistribution": []
+      },
+      "byDirection": {
+        "BUY": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        },
+        "SELL": {
+          "trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "winRate": 0,
+          "netR": 0,
+          "profitFactor": 0,
+          "maxDrawdownR": 0,
+          "avgR": 0,
+          "maxConsecutiveLosses": 0,
+          "rDistribution": []
+        }
+      }
+    }
+  ]
+}
