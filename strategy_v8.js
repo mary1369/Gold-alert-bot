@@ -1,6 +1,6 @@
 // ICT/SMC V8 — conservative, causal XAUUSD M5 signal engine.
 // Every decision uses only candles available at the signal candle close.
-function atr(d,n=14){if(d.length<n+1)return null;let tr=[];for(let i=1;i<d.length;i++)tr.push(Math.max(d[i].high-d[i].low,Math.abs(d[i].close-d[i-1].close),Math.abs(d[i].low-d[i-1].close)));return tr.slice(-n).reduce((a,b)=>a+b,0)/n}
+function atr(d,n=14){if(d.length<n+1)return null;let tr=[];for(let i=1;i<d.length;i++)tr.push(Math.max(d[i].high-d[i].low,Math.abs(d[i].high-d[i-1].close),Math.abs(d[i].low-d[i-1].close)));return tr.slice(-n).reduce((a,b)=>a+b,0)/n}
 function ema(d,n){if(d.length<n)return null;let k=2/(n+1),e=d[0].close;for(let i=1;i<d.length;i++)e+=(d[i].close-e)*k;return e}
 function swingHigh(d,i,s=2){if(i<s||i>=d.length-s)return false;for(let j=i-s;j<=i+s;j++)if(j!==i&&d[j].high>=d[i].high)return false;return true}
 function swingLow(d,i,s=2){if(i<s||i>=d.length-s)return false;for(let j=i-s;j<=i+s;j++)if(j!==i&&d[j].low<=d[i].low)return false;return true}
