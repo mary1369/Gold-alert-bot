@@ -1,17 +1,16 @@
 //+------------------------------------------------------------------+
 //| GoldOrderFlowBridge.mq5                                          |
-//| Free MT5 -> HTTP Order Flow bridge for Gold-alert-bot            |
+//| MT5 -> HTTP Order Flow bridge for Gold-alert-bot                 |
 //| Uses broker tick feed. It is NOT global XAUUSD order flow.       |
 //+------------------------------------------------------------------+
 #property strict
-#property version "1.0"
+#property version "1.1"
 
 input string InpSymbol = "XAUUSD";
-input string InpEndpoint = ""; // Example: https://YOUR-SERVER/orderflow
-input string InpApiKey = "";   // Optional shared secret
+input string InpEndpoint = "";
+input string InpApiKey = "";
 input int    InpSeconds = 2;
 input int    InpMaxTicks = 5000;
-input double InpImbalanceThreshold = 2.0;
 
 long   g_last_msc = 0;
 double g_cvd = 0.0;
@@ -76,34 +75,23 @@ void OnTimer()
 
       if(IsBuy(t)) { buyVol += v; buyCount++; }
       else if(IsSell(t)) { sellVol += v; sellCount++; }
-      else
-      {
-         // If the broker does not provide trade-side flags, do NOT invent
-         // buy/sell volume. Bid/ask-only ticks remain neutral.
-      }
    }
 
    if(newest <= g_last_msc) return;
 
    double delta = buyVol - sellVol;
    g_cvd += delta;
-   double denom = MathMax(MathMin(buyVol, sellVol), 0.0000001);
-   double ratio = (MathMax(buyVol, sellVol) / denom);
-   double imbalance = 0.0;
-   if(buyVol > sellVol && buyVol > 0) imbalance = ratio;
-   if(sellVol > buyVol && sellVol > 0) imbalance = -ratio;
+   double total = buyVol + sellVol;
+   double imbalance = total > 0 ? delta / total : 0.0; // canonical [-1,+1]
 
-   // Conservative absorption proxy: strong opposite-side volume with
-   // limited net movement is only calculated when bid/ask are available.
-   double mid = (lastBid > 0 && lastAsk > 0) ? (lastBid + lastAsk) / 2.0 : 0.0;
-   double spread = (lastBid > 0 && lastAsk > 0) ? (lastAsk - lastBid) : 0.0;
-   double absorption = 0.0;
-   if(mid > 0 && spread >= 0)
-      absorption = (buyVol + sellVol) > 0 ? MathAbs(delta) / (buyVol + sellVol) : 0.0;
+   // This is a tick-only heuristic, NOT true DOM/footprint absorption.
+   // It is retained as a separate labelled field so downstream code cannot
+   // mistake it for exchange-level passive liquidity information.
+   double absorption = total > 0 ? MathAbs(delta) / total : 0.0;
 
    string stamp = TimeToString((datetime)(newest/1000), TIME_DATE|TIME_SECONDS);
    string json = StringFormat(
-      "{\"timestamp\":\"%s.%03dZ\",\"symbol\":\"%s\",\"delta\":%.8f,\"cvd\":%.8f,\"buyVolume\":%.8f,\"sellVolume\":%.8f,\"imbalance\":%.8f,\"absorption\":%.8f,\"buyTicks\":%d,\"sellTicks\":%d,\"bid\":%.5f,\"ask\":%.5f,\"source\":\"MT5:%s\",\"isReal\":true}",
+      "{\"timestamp\":\"%s.%03dZ\",\"symbol\":\"%s\",\"delta\":%.8f,\"cvd\":%.8f,\"buyVolume\":%.8f,\"sellVolume\":%.8f,\"imbalance\":%.8f,\"absorption\":%.8f,\"absorptionMode\":\"tick_heuristic\",\"buyTicks\":%d,\"sellTicks\":%d,\"bid\":%.5f,\"ask\":%.5f,\"source\":\"MT5:%s\",\"isReal\":true}",
       stamp, (int)(newest%1000), JsonEscape(InpSymbol), delta, g_cvd,
       buyVol, sellVol, imbalance, absorption, buyCount, sellCount,
       lastBid, lastAsk, JsonEscape(InpSymbol));
