@@ -4,11 +4,13 @@ function atr(d,n=14){if(d.length<n+1)return null;let tr=[];for(let i=1;i<d.lengt
 function ema(d,n){if(d.length<n)return null;let k=2/(n+1),e=d[0].close;for(let i=1;i<d.length;i++)e+=(d[i].close-e)*k;return e}
 function swingHigh(d,i,s=2){if(i<s||i>=d.length-s)return false;for(let j=i-s;j<=i+s;j++)if(j!==i&&d[j].high>=d[i].high)return false;return true}
 function swingLow(d,i,s=2){if(i<s||i>=d.length-s)return false;for(let j=i-s;j<=i+s;j++)if(j!==i&&d[j].low<=d[i].low)return false;return true}
+// Confirmed swings only: the last s candles are excluded, so no future candle is used.
 function swings(d){let h=[],l=[];for(let i=2;i<d.length-2;i++){if(swingHigh(d,i))h.push({i,p:d[i].high});if(swingLow(d,i))l.push({i,p:d[i].low})}return{h,l}}
 function aggregate(d,min){let step=min*60000,o=[];for(const c of d){let t=Math.floor(c.time/step)*step,x=o.at(-1);if(!x||x.time!==t)o.push({time:t,open:c.open,high:c.high,low:c.low,close:c.close});else{x.high=Math.max(x.high,c.high);x.low=Math.min(x.low,c.low);x.close=c.close}}return o}
-function bias15(d){let x=aggregate(d,15);if(x.length<50)return'UNKNOWN';x=x.slice(0,-1);if(x.length<50)return'UNKNOWN';let e20=ema(x,20),e50=ema(x,50),c=x.at(-1).close;return c>e20&&e20>e50?'BULLISH':c<e20&&e20<e50?'BEARISH':'NEUTRAL'}
+function bias15(d){let x=aggregate(d,15);if(x.length<50)return'UNKNOWN';// At a M5 close, the current 15m bucket may still be open.
+ x=x.slice(0,-1);if(x.length<50)return'UNKNOWN';let e20=ema(x,20),e50=ema(x,50),c=x.at(-1).close;return c>e20&&e20>e50?'BULLISH':c<e20&&e20<e50?'BEARISH':'NEUTRAL'}
 function fvgAt(d,i,dir){if(i<2)return null;let a=d[i-2],c=d[i];if(dir==='BUY'&&c.low>a.high)return{low:a.high,high:c.low,i};if(dir==='SELL'&&c.high<a.low)return{low:c.high,high:a.low,i};return null}
-function freshFvg(d,dir,ms){for(let i=ms+1;i<=Math.min(ms+3,d.length-1);i++){let f=fvgAt(d,i,dir);if(!f)continue;let touched=false;for(let j=f.i+1;j<d.length-1;j++)if(d[j].low<=f.high&&d[j].high>=f.low){touched=true;break}if(!touched)return f}return null}
+function freshFvg(d,dir,ms){for(let i=ms+1;i<=Math.min(ms+3,d.length-1);i++){let f=fvgAt(d,i,dir);if(!f)continue;let touched=false;for(let j=f.i+1;j<d.length;j++){if(j===d.length-1)continue;if(d[j].low<=f.high&&d[j].high>=f.low){touched=true;break}}if(!touched)return f}return null}
 function overlap(c,z){return c&&z&&c.high>=z.low&&c.low<=z.high}
 function rsi(d,n=14){if(d.length<n+1)return null;let g=0,l=0;for(let i=d.length-n;i<d.length;i++){let x=d[i].close-d[i-1].close;if(x>=0)g+=x;else l-=x}return l===0?100:100-100/(1+g/l)}
 function analyzeV8(d){if(!Array.isArray(d)||d.length<220)return null;const c=d.at(-1),a=atr(d),b=bias15(d),s=swings(d);if(!a||b==='UNKNOWN'||b==='NEUTRAL'||s.h.length<3||s.l.length<3)return null;const dir=b==='BULLISH'?'BUY':'SELL';const ph=s.h.at(-2),pl=s.l.at(-2),ch=s.h.at(-1),cl=s.l.at(-1);if(dir==='BUY'?(ch.p<=ph.p||cl.p<=pl.p):(ch.p>=ph.p||cl.p>=pl.p))return null;
