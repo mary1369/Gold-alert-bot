@@ -6,6 +6,11 @@ on:
       - 'backtest/v71_gate_diagnostic.js'
       - 'strategy_v71.js'
       - '.github/workflows/v71-gate-diagnostic.yml'
+  pull_request:
+    paths:
+      - 'backtest/v71_gate_diagnostic.js'
+      - 'strategy_v71.js'
+      - '.github/workflows/v71-gate-diagnostic.yml'
 jobs:
   diagnostic:
     runs-on: ubuntu-latest
@@ -18,14 +23,15 @@ jobs:
           node-version: 20
       - name: Install dependency
         run: npm install --no-audit --no-fund dukascopy-node@1.50.0
-      - name: Run exact V7.1 gate diagnostic
+      - name: Run attribution + Fresh-FVG/look-ahead diagnostic
         run: node backtest/v71_gate_diagnostic.js
       - name: Upload diagnostic
         uses: actions/upload-artifact@v4
         with:
           name: v71-gate-diagnostic
           path: backtest/v71_gate_diagnostic.json
-      - name: Persist diagnostic
+      - name: Persist diagnostic on branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name 'gold-alert-bot'
           git config user.email 'actions@github.com'
