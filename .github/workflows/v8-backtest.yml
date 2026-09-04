@@ -2,22 +2,52 @@ name: ICT V8 backtest
 on:
   workflow_dispatch:
   push:
-    paths: ['strategy_v8.js','backtest/v8_backtest.js','.github/workflows/v8-backtest.yml']
+    paths:
+      - 'strategy_v8.js'
+      - 'backtest/v8_backtest.js'
+      - 'orderflow/**'
+      - 'mt5/bridge_server.js'
+      - '.github/workflows/v8-backtest.yml'
 permissions:
   contents: read
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
-        with: {node-version: '24', package-manager-cache: false}
-      - run: npm install --no-audit --no-fund
-      - run: node --check strategy_v8.js
-      - run: node --check backtest/v8_backtest.js
-      - run: node backtest/v8_backtest.js
-      - uses: actions/upload-artifact@v4
         with:
-          name: ict-v8-backtest
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Syntax and schema checks
+        run: |
+          node --check strategy_v8.js
+          node --check backtest/v8_backtest.js
+          node --check orderflow/schema.js
+          node --check orderflow/validate.js
+          node --check mt5/bridge_server.js
+      - name: Run V8 A/B/C validation
+        id: backtest
+        run: |
+          set +e
+          node backtest/v8_backtest.js
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+      - name: Upload V8 JSON result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ict-v8-backtest-json
           path: backtest/v8_result.json
+          if-no-files-found: error
+      - name: Upload V8 trade CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ict-v8-backtest-trades
+          path: backtest/v8_trades.csv
+          if-no-files-found: error
