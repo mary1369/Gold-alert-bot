@@ -1,0 +1,18 @@
+name: ICT V8 backtest
+on:
+  workflow_dispatch:
+  push:
+    paths: ['strategy_v8.js','backtest/v8_backtest.js']
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: npm ci
+      - run: node backtest/v8_backtest.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ict-v8-backtest
+          path: backtest/v8_result.json
