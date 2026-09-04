@@ -2,9 +2,9 @@
   "strategy": "V7.1",
   "model": "Raid/Sweep -> MSS -> displacement -> fresh FVG -> 0.705/0.786 OTE",
   "source": "Dukascopy XAUUSD M5",
-  "candles": 5824,
-  "periodStart": 1785789600000,
-  "periodEnd": 1788306900000,
+  "candles": 6072,
+  "periodStart": 1785936300000,
+  "periodEnd": 1788528000000,
   "split": "first 2/3 IS; final 1/3 OOS; OOS untouched by rules",
   "gates": [
     "M15 neutral blocked",
@@ -21,15 +21,63 @@
     "risk 0.5-1.8 ATR"
   ],
   "IS": {
-    "trades": 0,
-    "wins": 0,
+    "trades": 1,
+    "wins": 1,
     "losses": 0,
-    "winRate": 0,
-    "netR": 0,
-    "profitFactor": 0,
+    "winRate": 100,
+    "netR": 2,
+    "profitFactor": 2,
     "maxDrawdownR": 0,
-    "avgR": 0,
-    "details": []
+    "avgR": 2,
+    "details": [
+      {
+        "direction": "BUY",
+        "entry": 4264.615,
+        "sl": 4257.985142857143,
+        "tp1": 4271.244857142857,
+        "tp2": 4277.874714285714,
+        "tp3": 4284.504571428571,
+        "score": 12,
+        "atr": 4.399285714285595,
+        "rsi": 66.76567656765693,
+        "m15": "BULLISH",
+        "structure": "BUY",
+        "bos": true,
+        "mss": true,
+        "sweep": true,
+        "ob": true,
+        "fvg": true,
+        "zone": "BULLISH FVG",
+        "confirmation": true,
+        "displacement": true,
+        "fibNear": 0.705,
+        "fib705Distance": 5.729349999999613,
+        "fib786Distance": 5.735020000000077,
+        "fibLevels": {
+          "0.618": 4258.89174,
+          "0.705": 4258.88565,
+          "0.786": 4258.87998
+        },
+        "candleTime": 1786075200000,
+        "diagnostic": {
+          "model": "Raid -> MSS -> displacement -> fresh FVG first touch -> OTE zone with 1.5 ATR tolerance",
+          "sweepIndex": 434,
+          "mssIndex": 438,
+          "fvgIndex": 439,
+          "displacementAge": 1,
+          "m15ClosedOnly": true,
+          "m15NeutralBlocked": true,
+          "rsiGate": true,
+          "oteGate": true,
+          "obFvgOverlap": true,
+          "slBasis": "sweep/OB/FVG + ATR buffer"
+        },
+        "executedEntry": 4264.455,
+        "outcome": "TP2",
+        "R": 2,
+        "bars": 22
+      }
+    ]
   },
   "OOS": {
     "trades": 0,
@@ -43,14 +91,62 @@
     "details": []
   },
   "ALL": {
-    "trades": 0,
-    "wins": 0,
+    "trades": 1,
+    "wins": 1,
     "losses": 0,
-    "winRate": 0,
-    "netR": 0,
-    "profitFactor": 0,
+    "winRate": 100,
+    "netR": 2,
+    "profitFactor": 2,
     "maxDrawdownR": 0,
-    "avgR": 0,
-    "details": []
+    "avgR": 2,
+    "details": [
+      {
+        "direction": "BUY",
+        "entry": 4264.615,
+        "sl": 4257.985142857143,
+        "tp1": 4271.244857142857,
+        "tp2": 4277.874714285714,
+        "tp3": 4284.504571428571,
+        "score": 12,
+        "atr": 4.399285714285595,
+        "rsi": 66.76567656765693,
+        "m15": "BULLISH",
+        "structure": "BUY",
+        "bos": true,
+        "mss": true,
+        "sweep": true,
+        "ob": true,
+        "fvg": true,
+        "zone": "BULLISH FVG",
+        "confirmation": true,
+        "displacement": true,
+        "fibNear": 0.705,
+        "fib705Distance": 5.729349999999613,
+        "fib786Distance": 5.735020000000077,
+        "fibLevels": {
+          "0.618": 4258.89174,
+          "0.705": 4258.88565,
+          "0.786": 4258.87998
+        },
+        "candleTime": 1786075200000,
+        "diagnostic": {
+          "model": "Raid -> MSS -> displacement -> fresh FVG first touch -> OTE zone with 1.5 ATR tolerance",
+          "sweepIndex": 434,
+          "mssIndex": 438,
+          "fvgIndex": 439,
+          "displacementAge": 1,
+          "m15ClosedOnly": true,
+          "m15NeutralBlocked": true,
+          "rsiGate": true,
+          "oteGate": true,
+          "obFvgOverlap": true,
+          "slBasis": "sweep/OB/FVG + ATR buffer"
+        },
+        "executedEntry": 4264.455,
+        "outcome": "TP2",
+        "R": 2,
+        "bars": 22
+      }
+    ]
   }
 }

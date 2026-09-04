@@ -1,0 +1,34 @@
+name: V7.1 Explicit Look-ahead Fast Audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backtest/v71_explicit_lookahead_fast.js'
+      - 'backtest/v71_gate_diagnostic.json'
+      - 'strategy_v71.js'
+      - '.github/workflows/v71-explicit-lookahead-fast.yml'
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - name: Run explicit audit
+        run: node backtest/v71_explicit_lookahead_fast.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v71-explicit-lookahead-fast
+          path: backtest/v71_explicit_lookahead_fast.json
+      - name: Persist audit on diagnostic branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name 'gold-alert-bot'
+          git config user.email 'actions@github.com'
+          git add backtest/v71_explicit_lookahead_fast.json
+          git diff --cached --quiet || git commit -m 'persist V7.1 explicit look-ahead audit [skip ci]'
+          git push

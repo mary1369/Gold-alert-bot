@@ -4,6 +4,13 @@ on:
   push:
     paths:
       - 'backtest/v71_gate_diagnostic.js'
+      - 'backtest/v71_fresh_fvg_lookahead_audit.js'
+      - 'strategy_v71.js'
+      - '.github/workflows/v71-gate-diagnostic.yml'
+  pull_request:
+    paths:
+      - 'backtest/v71_gate_diagnostic.js'
+      - 'backtest/v71_fresh_fvg_lookahead_audit.js'
       - 'strategy_v71.js'
       - '.github/workflows/v71-gate-diagnostic.yml'
 jobs:
@@ -18,17 +25,25 @@ jobs:
           node-version: 20
       - name: Install dependency
         run: npm install --no-audit --no-fund dukascopy-node@1.50.0
-      - name: Run exact V7.1 gate diagnostic
+      - name: Run attribution diagnostic
         run: node backtest/v71_gate_diagnostic.js
-      - name: Upload diagnostic
+      - name: Run explicit Fresh-FVG + future-bar invariance audit
+        run: node backtest/v71_fresh_fvg_lookahead_audit.js
+      - name: Upload diagnostics
         uses: actions/upload-artifact@v4
         with:
           name: v71-gate-diagnostic
           path: backtest/v71_gate_diagnostic.json
-      - name: Persist diagnostic
+      - name: Upload look-ahead audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: v71-fresh-fvg-lookahead-audit
+          path: backtest/v71_fresh_fvg_lookahead_audit.json
+      - name: Persist diagnostics on branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name 'gold-alert-bot'
           git config user.email 'actions@github.com'
-          git add backtest/v71_gate_diagnostic.json
-          git diff --cached --quiet || git commit -m 'persist V7.1 gate diagnostic [skip ci]'
+          git add backtest/v71_gate_diagnostic.json backtest/v71_fresh_fvg_lookahead_audit.json
+          git diff --cached --quiet || git commit -m 'persist V7.1 look-ahead audit [skip ci]'
           git push

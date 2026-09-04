@@ -1,0 +1,97 @@
+{
+  "test": "Fresh-FVG Runtime Audit + Explicit Future-Bar Invariance / Look-ahead Test",
+  "strategy": "V7.1",
+  "source": "Dukascopy XAUUSD M5",
+  "candles": 35214,
+  "periodStart": "2026-03-06T00:00:00.000Z",
+  "periodEnd": "2026-09-02T23:55:00.000Z",
+  "splitIndex": 23476,
+  "targets": [
+    {
+      "time": "2026-05-06T04:35:00.000Z",
+      "index": 11659,
+      "dir": "BUY"
+    },
+    {
+      "time": "2026-06-10T01:45:00.000Z",
+      "index": 18495,
+      "dir": "SELL"
+    },
+    {
+      "time": "2026-06-10T10:10:00.000Z",
+      "index": 18596,
+      "dir": "SELL"
+    },
+    {
+      "time": "2026-06-11T19:05:00.000Z",
+      "index": 18979,
+      "dir": "BUY"
+    },
+    {
+      "time": "2026-06-16T09:55:00.000Z",
+      "index": 19697,
+      "dir": "BUY"
+    },
+    {
+      "time": "2026-07-24T06:00:00.000Z",
+      "index": 27282,
+      "dir": "SELL"
+    },
+    {
+      "time": "2026-08-07T04:00:00.000Z",
+      "index": 30018,
+      "dir": "BUY"
+    }
+  ],
+  "methodology": {
+    "runtimeFutureAccess": "Proxy guards the exact target prefix and records every numeric array index read; any index > target is a violation.",
+    "futureBarInvariance": "For each target signal, run analyzeV71 on the target prefix, mutate only bars after target, then run the identical target prefix again; output must remain identical.",
+    "note": "The harness never passes future bars to analyzeV71 during target evaluation. Therefore suffix mutation cannot influence the prefix unless the harness itself leaks it; this is paired with the runtime future-index guard."
+  },
+  "freshFvg": {
+    "IS": {
+      "targets": 5,
+      "signals": 0,
+      "violations": 0,
+      "runtimeErrors": 0,
+      "examples": []
+    },
+    "OOS": {
+      "targets": 2,
+      "signals": 0,
+      "violations": 0,
+      "runtimeErrors": 0,
+      "examples": []
+    },
+    "ALL": {
+      "targets": 7,
+      "signals": 0,
+      "violations": 0,
+      "runtimeErrors": 0,
+      "examples": []
+    }
+  },
+  "futureBarInvariance": {
+    "IS": {
+      "checked": 0,
+      "violations": 0,
+      "examples": []
+    },
+    "OOS": {
+      "checked": 0,
+      "violations": 0,
+      "examples": []
+    },
+    "ALL": {
+      "checked": 0,
+      "violations": 0,
+      "examples": []
+    }
+  },
+  "staticChecks": {
+    "swingCenteredUsesCurrentBoundary": false,
+    "fvgFormationUsesOnlyFormationBars": false,
+    "touchScanBoundedByArrayEnd": false,
+    "usesAnalyzePrefixInHarness": true
+  }
+}
