@@ -5,6 +5,7 @@ on:
     paths:
       - 'strategy_v8.js'
       - 'backtest/v8_backtest.js'
+      - 'backtest/v8_gate_diagnostic.js'
       - 'orderflow/**'
       - 'mt5/bridge_server.js'
       - '.github/workflows/v8-backtest.yml'
@@ -26,9 +27,19 @@ jobs:
         run: |
           node --check strategy_v8.js
           node --check backtest/v8_backtest.js
+          node --check backtest/v8_gate_diagnostic.js
           node --check orderflow/schema.js
           node --check orderflow/validate.js
           node --check mt5/bridge_server.js
+      - name: Run V8 gate diagnostics
+        run: node backtest/v8_gate_diagnostic.js
+      - name: Upload V8 gate diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ict-v8-gate-diagnostic
+          path: backtest/v8_gate_diagnostic.json
+          if-no-files-found: error
       - name: Run V8 A/B/C validation
         id: backtest
         run: |
