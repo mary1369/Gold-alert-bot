@@ -2,15 +2,20 @@ name: ICT V8 backtest
 on:
   workflow_dispatch:
   push:
-    paths: ['strategy_v8.js','backtest/v8_backtest.js']
+    paths: ['strategy_v8.js','backtest/v8_backtest.js','.github/workflows/v8-backtest.yml']
+permissions:
+  contents: read
 jobs:
   backtest:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: '20'}
-      - run: npm ci
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: {node-version: '24', package-manager-cache: false}
+      - run: npm install --no-audit --no-fund
+      - run: node --check strategy_v8.js
+      - run: node --check backtest/v8_backtest.js
       - run: node backtest/v8_backtest.js
       - uses: actions/upload-artifact@v4
         with:
