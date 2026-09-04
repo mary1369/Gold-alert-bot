@@ -1,18 +1,20 @@
+const { normalizeOrderFlow } = require('./schema');
+
 function validateOrderFlow(x, nowMs = Date.now()) {
-  if (!x || x.isReal !== true) return { valid: false, reason: 'not_real' };
-  if (!x.source || typeof x.source !== 'string') return { valid: false, reason: 'missing_source' };
-  const t = Date.parse(x.timestamp);
-  if (!Number.isFinite(t)) return { valid: false, reason: 'bad_timestamp' };
+  const n = normalizeOrderFlow(x);
+  if (!n) return { valid: false, reason: 'schema' };
+  const t = Date.parse(n.timestamp);
   if (Math.abs(nowMs - t) > 120000) return { valid: false, reason: 'stale' };
-  for (const k of ['delta','cvd','buyVolume','sellVolume','imbalance','absorption']) {
-    if (!Number.isFinite(Number(x[k]))) return { valid: false, reason: `bad_${k}` };
-  }
-  return { valid: true, reason: 'ok' };
+  return { valid: true, reason: 'ok', data: n };
 }
 
 module.exports = { validateOrderFlow };
 
 if (require.main === module) {
-  const sample = { timestamp: new Date().toISOString(), source: 'TEST', isReal: true, delta: 10, cvd: 100, buyVolume: 60, sellVolume: 50, imbalance: 1.2, absorption: 0.3 };
+  const sample = {
+    timestamp: new Date().toISOString(), source: 'MT5:XAUUSD', symbol: 'XAUUSD', isReal: true,
+    delta: 10, cvd: 100, buyVolume: 60, sellVolume: 50, imbalance: 0.0909,
+    absorption: 0.0909, absorptionMode: 'tick_heuristic'
+  };
   console.log(JSON.stringify(validateOrderFlow(sample)));
 }
