@@ -1,0 +1,30 @@
+name: V8.1 Conservative Validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backtest/v81_backtest.js'
+      - '.github/workflows/v81-validation.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund dukascopy-node@1.50.0
+      - run: node backtest/v81_backtest.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v81-validation
+          path: backtest/v81_result.json
+      - name: Persist result
+        run: |
+          git config user.name 'gold-alert-bot'
+          git config user.email 'actions@github.com'
+          git add backtest/v81_result.json
+          git diff --cached --quiet || git commit -m 'persist V8.1 validation result [skip ci]'
+          git push
