@@ -1,0 +1,22 @@
+name: V8 Candidate Attribution
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backtest/v8_candidate_attribution.js'
+      - 'backtest/v8_candidate_result.json'
+      - '.github/workflows/v8-candidate-attribution.yml'
+jobs:
+  attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Attribution test
+        run: node backtest/v8_candidate_attribution.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v8-candidate-attribution
+          path: backtest/v8_candidate_attribution_result.json
