@@ -2,8 +2,8 @@
   "strategy": "V8.1-fixed-engine",
   "instrument": "XAUUSD",
   "timeframe": "M5",
-  "candles": 69054,
-  "days": 365,
+  "candles": 211304,
+  "days": 1095,
   "spread": 0.2,
   "slippage": 0.1,
   "maxHoldBars": 96,
@@ -15,19 +15,20 @@
       "name": "W1",
       "range": [
         250,
-        13809
+        42259
       ],
       "metrics": {
-        "trades": 1,
+        "trades": 2,
         "wins": 0,
-        "losses": 1,
+        "losses": 2,
         "winRate": 0,
-        "netR": -1,
+        "netR": -2,
         "profitFactor": 0,
-        "maxDrawdownR": 1,
+        "maxDrawdownR": 2,
         "avgR": -1,
-        "maxConsecutiveLosses": 1,
+        "maxConsecutiveLosses": 2,
         "rDistribution": [
+          -1,
           -1
         ]
       },
@@ -46,39 +47,60 @@
         ]
       },
       "SELL": {
-        "trades": 0,
+        "trades": 1,
         "wins": 0,
-        "losses": 0,
-        "winRate": null,
-        "netR": 0,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": null,
-        "maxConsecutiveLosses": 0,
-        "rDistribution": []
+        "losses": 1,
+        "winRate": 0,
+        "netR": -1,
+        "profitFactor": 0,
+        "maxDrawdownR": 1,
+        "avgR": -1,
+        "maxConsecutiveLosses": 1,
+        "rDistribution": [
+          -1
+        ]
       }
     },
     {
       "name": "W2",
       "range": [
-        13810,
-        27620
+        42260,
+        84520
       ],
       "metrics": {
-        "trades": 1,
+        "trades": 4,
         "wins": 1,
-        "losses": 0,
-        "winRate": 100,
-        "netR": 2,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": 2,
-        "maxConsecutiveLosses": 0,
+        "losses": 3,
+        "winRate": 25,
+        "netR": -1,
+        "profitFactor": 0.667,
+        "maxDrawdownR": 2,
+        "avgR": -0.25,
+        "maxConsecutiveLosses": 2,
         "rDistribution": [
-          2
+          -1,
+          -1,
+          2,
+          -1
         ]
       },
       "BUY": {
+        "trades": 3,
+        "wins": 0,
+        "losses": 3,
+        "winRate": 0,
+        "netR": -3,
+        "profitFactor": 0,
+        "maxDrawdownR": 3,
+        "avgR": -1,
+        "maxConsecutiveLosses": 3,
+        "rDistribution": [
+          -1,
+          -1,
+          -1
+        ]
+      },
+      "SELL": {
         "trades": 1,
         "wins": 1,
         "losses": 0,
@@ -91,57 +113,29 @@
         "rDistribution": [
           2
         ]
-      },
-      "SELL": {
-        "trades": 0,
-        "wins": 0,
-        "losses": 0,
-        "winRate": null,
-        "netR": 0,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": null,
-        "maxConsecutiveLosses": 0,
-        "rDistribution": []
       }
     },
     {
       "name": "W3",
       "range": [
-        27621,
-        41431
+        84521,
+        126781
       ],
       "metrics": {
-        "trades": 2,
-        "wins": 1,
+        "trades": 1,
+        "wins": 0,
         "losses": 1,
-        "winRate": 50,
-        "netR": 1,
-        "profitFactor": 2,
+        "winRate": 0,
+        "netR": -1,
+        "profitFactor": 0,
         "maxDrawdownR": 1,
-        "avgR": 0.5,
+        "avgR": -1,
         "maxConsecutiveLosses": 1,
         "rDistribution": [
-          -1,
-          2
+          -1
         ]
       },
       "BUY": {
-        "trades": 2,
-        "wins": 1,
-        "losses": 1,
-        "winRate": 50,
-        "netR": 1,
-        "profitFactor": 2,
-        "maxDrawdownR": 1,
-        "avgR": 0.5,
-        "maxConsecutiveLosses": 1,
-        "rDistribution": [
-          -1,
-          2
-        ]
-      },
-      "SELL": {
         "trades": 0,
         "wins": 0,
         "losses": 0,
@@ -152,40 +146,58 @@
         "avgR": null,
         "maxConsecutiveLosses": 0,
         "rDistribution": []
+      },
+      "SELL": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "winRate": 0,
+        "netR": -1,
+        "profitFactor": 0,
+        "maxDrawdownR": 1,
+        "avgR": -1,
+        "maxConsecutiveLosses": 1,
+        "rDistribution": [
+          -1
+        ]
       }
     },
     {
       "name": "W4",
       "range": [
-        41432,
-        55242
+        126782,
+        169042
       ],
       "metrics": {
-        "trades": 2,
-        "wins": 1,
-        "losses": 1,
+        "trades": 4,
+        "wins": 2,
+        "losses": 2,
         "winRate": 50,
-        "netR": 1,
+        "netR": 2,
         "profitFactor": 2,
         "maxDrawdownR": 1,
         "avgR": 0.5,
         "maxConsecutiveLosses": 1,
         "rDistribution": [
           -1,
+          2,
+          -1,
           2
         ]
       },
       "BUY": {
-        "trades": 1,
-        "wins": 1,
-        "losses": 0,
-        "winRate": 100,
-        "netR": 2,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": 2,
-        "maxConsecutiveLosses": 0,
+        "trades": 3,
+        "wins": 2,
+        "losses": 1,
+        "winRate": 66.67,
+        "netR": 3,
+        "profitFactor": 4,
+        "maxDrawdownR": 1,
+        "avgR": 1,
+        "maxConsecutiveLosses": 1,
         "rDistribution": [
+          2,
+          -1,
           2
         ]
       },
@@ -207,62 +219,80 @@
     {
       "name": "W5",
       "range": [
-        55243,
-        69053
+        169043,
+        211303
       ],
       "metrics": {
-        "trades": 1,
-        "wins": 1,
-        "losses": 0,
-        "winRate": 100,
-        "netR": 2,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": 2,
-        "maxConsecutiveLosses": 0,
+        "trades": 5,
+        "wins": 3,
+        "losses": 2,
+        "winRate": 60,
+        "netR": 4,
+        "profitFactor": 3,
+        "maxDrawdownR": 1,
+        "avgR": 0.8,
+        "maxConsecutiveLosses": 1,
         "rDistribution": [
+          -1,
+          2,
+          -1,
+          2,
           2
         ]
       },
       "BUY": {
-        "trades": 1,
-        "wins": 1,
-        "losses": 0,
-        "winRate": 100,
-        "netR": 2,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": 2,
-        "maxConsecutiveLosses": 0,
+        "trades": 4,
+        "wins": 3,
+        "losses": 1,
+        "winRate": 75,
+        "netR": 5,
+        "profitFactor": 6,
+        "maxDrawdownR": 1,
+        "avgR": 1.25,
+        "maxConsecutiveLosses": 1,
         "rDistribution": [
+          -1,
+          2,
+          2,
           2
         ]
       },
       "SELL": {
-        "trades": 0,
+        "trades": 1,
         "wins": 0,
-        "losses": 0,
-        "winRate": null,
-        "netR": 0,
-        "profitFactor": null,
-        "maxDrawdownR": 0,
-        "avgR": null,
-        "maxConsecutiveLosses": 0,
-        "rDistribution": []
+        "losses": 1,
+        "winRate": 0,
+        "netR": -1,
+        "profitFactor": 0,
+        "maxDrawdownR": 1,
+        "avgR": -1,
+        "maxConsecutiveLosses": 1,
+        "rDistribution": [
+          -1
+        ]
       }
     }
   ],
   "ALL": {
-    "trades": 7,
-    "wins": 4,
-    "losses": 3,
-    "winRate": 57.14,
-    "netR": 5,
-    "profitFactor": 2.667,
-    "maxDrawdownR": 1,
-    "avgR": 0.714,
-    "maxConsecutiveLosses": 1,
+    "trades": 16,
+    "wins": 6,
+    "losses": 10,
+    "winRate": 37.5,
+    "netR": 2,
+    "profitFactor": 1.2,
+    "maxDrawdownR": 5,
+    "avgR": 0.125,
+    "maxConsecutiveLosses": 4,
     "rDistribution": [
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      2,
       -1,
       2,
       -1,
@@ -273,16 +303,21 @@
     ]
   },
   "ALL_BUY": {
-    "trades": 6,
-    "wins": 4,
-    "losses": 2,
-    "winRate": 66.67,
-    "netR": 6,
-    "profitFactor": 4,
-    "maxDrawdownR": 1,
-    "avgR": 1,
-    "maxConsecutiveLosses": 1,
+    "trades": 11,
+    "wins": 5,
+    "losses": 6,
+    "winRate": 45.45,
+    "netR": 4,
+    "profitFactor": 1.667,
+    "maxDrawdownR": 4,
+    "avgR": 0.364,
+    "maxConsecutiveLosses": 4,
     "rDistribution": [
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
       -1,
       2,
       -1,
@@ -292,21 +327,25 @@
     ]
   },
   "ALL_SELL": {
-    "trades": 1,
-    "wins": 0,
-    "losses": 1,
-    "winRate": 0,
-    "netR": -1,
-    "profitFactor": 0,
-    "maxDrawdownR": 1,
-    "avgR": -1,
-    "maxConsecutiveLosses": 1,
+    "trades": 5,
+    "wins": 1,
+    "losses": 4,
+    "winRate": 20,
+    "netR": -2,
+    "profitFactor": 0.5,
+    "maxDrawdownR": 3,
+    "avgR": -0.4,
+    "maxConsecutiveLosses": 3,
     "rDistribution": [
+      -1,
+      2,
+      -1,
+      -1,
       -1
     ]
   },
   "sanity": {
-    "allTrades": 7,
-    "windowTrades": 7
+    "allTrades": 16,
+    "windowTrades": 16
   }
 }
