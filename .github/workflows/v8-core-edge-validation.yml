@@ -1,6 +1,10 @@
 name: V8 Core Edge Validation
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backtest/v8_core_edge_validation.js'
+      - '.github/workflows/v8-core-edge-validation.yml'
   push:
     paths:
       - 'backtest/v8_core_edge_validation.js'
