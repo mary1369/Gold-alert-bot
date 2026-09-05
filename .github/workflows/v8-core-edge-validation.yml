@@ -5,6 +5,7 @@ on:
     paths:
       - 'backtest/v8_core_edge_validation.js'
       - '.github/workflows/v8-core-edge-validation.yml'
+# validation-only: trigger run without touching main/production
 jobs:
   validate:
     runs-on: ubuntu-latest
