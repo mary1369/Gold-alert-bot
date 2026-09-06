@@ -24,24 +24,22 @@ jobs:
       - run: npm install --no-audit --no-fund dukascopy-node@1.50.0
       - name: Run frozen M15 holdout validation
         env:
-          HOLDOUT_MODE: immutable
-          HOLDOUT_STRATEGY: "OB+Confirmation+RR2+London"
-          HOLDOUT_TIMEFRAME: M15
-          HOLDOUT_SWINGS: "7,10"
+          VALIDATION_MODE: blind_holdout
         run: node backtest/v8_core_edge_validation.js
-      - name: Verify holdout artifact contains trade-level data
+      - name: Verify immutable blind holdout artifact
         run: |
           node - <<'NODE'
           const fs=require('fs');
-          const p='backtest/v8_core_edge_validation_result.json';
+          const p='backtest/v8_blind_holdout_result.json';
           const x=JSON.parse(fs.readFileSync(p,'utf8'));
-          if(!x.M15 || x.M15.timeframe!=='m15') throw new Error('Unexpected or missing M15 result');
-          for(const s of ['7','10']){
-            if(!x.M15.swingSensitivity?.[s]?.OOS?.trades?.length) throw new Error('Missing trade-level OOS trades for SWING '+s);
-          }
-          console.log('Holdout artifact trade-level verification: PASS');
+          if(x.mode!=='BLIND_HOLDOUT_IMMUTABLE') throw new Error('Not immutable blind holdout');
+          if(x.previousDataEnd!=='2026-09-06T12:30:00.000Z') throw new Error('Unexpected previous data boundary');
+          if(x.blindStart!=='2026-09-06T12:45:00.000Z') throw new Error('Unexpected blind start');
+          if(x.blindEnd!=='2026-09-06T16:00:00.000Z') throw new Error('Unexpected blind end');
+          for(const s of ['7','10']) if(!x.variants[s] || !Array.isArray(x.variants[s].trades)) throw new Error('Missing trade-level variant '+s);
+          console.log('Immutable blind holdout verification: PASS');
           NODE
       - uses: actions/upload-artifact@v4
         with:
-          name: v8-m15-holdout-swing7-swing10
-          path: backtest/v8_core_edge_validation_result.json
+          name: v8-m15-blind-holdout-swing7-swing10
+          path: backtest/v8_blind_holdout_result.json
