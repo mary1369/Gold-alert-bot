@@ -35,9 +35,9 @@ jobs:
           const fs=require('fs');
           const p='backtest/v8_core_edge_validation_result.json';
           const x=JSON.parse(fs.readFileSync(p,'utf8'));
-          if(x.timeframe && x.timeframe!=='m15') throw new Error('Unexpected timeframe');
+          if(!x.M15 || x.M15.timeframe!=='m15') throw new Error('Unexpected or missing M15 result');
           for(const s of ['7','10']){
-            if(!x.swingSensitivity?.[s]?.OOS?.trades?.length) throw new Error('Missing trade-level OOS trades for SWING '+s);
+            if(!x.M15.swingSensitivity?.[s]?.OOS?.trades?.length) throw new Error('Missing trade-level OOS trades for SWING '+s);
           }
           console.log('Holdout artifact trade-level verification: PASS');
           NODE
