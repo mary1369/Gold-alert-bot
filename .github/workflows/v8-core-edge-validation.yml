@@ -9,18 +9,39 @@ on:
     paths:
       - 'backtest/v8_core_edge_validation.js'
       - '.github/workflows/v8-core-edge-validation.yml'
-# validation-only: trigger run without touching main/production
+# validation-only: branch-scoped; never writes main/production
 jobs:
-  validate:
+  holdout_validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: validation/v8-core-edge
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm install --no-audit --no-fund dukascopy-node@1.50.0
-      - run: node backtest/v8_core_edge_validation.js
+      - name: Run frozen M15 holdout validation
+        env:
+          HOLDOUT_MODE: immutable
+          HOLDOUT_STRATEGY: "OB+Confirmation+RR2+London"
+          HOLDOUT_TIMEFRAME: M15
+          HOLDOUT_SWINGS: "7,10"
+        run: node backtest/v8_core_edge_validation.js
+      - name: Verify holdout artifact contains trade-level data
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='backtest/v8_core_edge_validation_result.json';
+          const x=JSON.parse(fs.readFileSync(p,'utf8'));
+          if(x.timeframe && x.timeframe!=='m15') throw new Error('Unexpected timeframe');
+          for(const s of ['7','10']){
+            if(!x.swingSensitivity?.[s]?.OOS?.trades?.length) throw new Error('Missing trade-level OOS trades for SWING '+s);
+          }
+          console.log('Holdout artifact trade-level verification: PASS');
+          NODE
       - uses: actions/upload-artifact@v4
         with:
-          name: v8-core-edge-validation
+          name: v8-m15-holdout-swing7-swing10
           path: backtest/v8_core_edge_validation_result.json
