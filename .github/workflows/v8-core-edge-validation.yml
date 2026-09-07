@@ -30,16 +30,21 @@ jobs:
         run: |
           node - <<'NODE'
           const fs=require('fs');
-          const p='backtest/v8_blind_holdout_result.json';
-          const x=JSON.parse(fs.readFileSync(p,'utf8'));
-          if(x.mode!=='BLIND_HOLDOUT_IMMUTABLE') throw new Error('Not immutable blind holdout');
-          if(x.previousDataEnd!=='2026-09-06T12:30:00.000Z') throw new Error('Unexpected previous data boundary');
-          if(x.blindStart!=='2026-09-06T12:45:00.000Z') throw new Error('Unexpected blind start');
-          if(x.blindEnd!=='2026-09-06T16:00:00.000Z') throw new Error('Unexpected blind end');
+          const m=JSON.parse(fs.readFileSync('backtest/blind_holdout_manifest.json','utf8'));
+          const e=JSON.parse(fs.readFileSync('backtest/blind_env.json','utf8'));
+          const x=JSON.parse(fs.readFileSync('backtest/v8_blind_holdout_result.json','utf8'));
+          if(m.schema!=='v8-blind-holdout-manifest-v1') throw new Error('bad manifest schema');
+          if(JSON.stringify(e)!==JSON.stringify({BLIND_PREVIOUS_DATA_END:m.previousOosEnd,BLIND_START:m.blindStart,BLIND_END:m.blindEnd})) throw new Error('env/manifest mismatch');
+          if(x.previousDataEnd!==m.previousOosEnd||x.blindStart!==m.blindStart||x.blindEnd!==m.blindEnd) throw new Error('result/manifest mismatch');
+          if(JSON.stringify(x.frozenVariants)!==JSON.stringify([7,10])) throw new Error('variants not frozen');
           for(const s of ['7','10']) if(!x.variants[s] || !Array.isArray(x.variants[s].trades)) throw new Error('Missing trade-level variant '+s);
+          for(const s of ['7','10']) for(const t of x.variants[s].trades){if(Date.parse(t.signalTime)<Date.parse(m.blindStart)||Date.parse(t.signalTime)>=Date.parse(m.blindEnd)) throw new Error('trade outside blind range');if(Date.parse(t.exitTime)>=Date.parse(m.blindEnd)) throw new Error('trade unresolved inside blind');}
           console.log('Immutable blind holdout verification: PASS');
           NODE
       - uses: actions/upload-artifact@v4
         with:
           name: v8-m15-blind-holdout-swing7-swing10
-          path: backtest/v8_blind_holdout_result.json
+          path: |
+            backtest/v8_blind_holdout_result.json
+            backtest/blind_holdout_manifest.json
+            backtest/blind_env.json
