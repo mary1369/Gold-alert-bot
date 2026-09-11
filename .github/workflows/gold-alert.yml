@@ -8,8 +8,8 @@ on:
     - cron: '*/5 * * * *'
 
 env:
-  # Telegram alerts are temporarily paused. Set to '1' to resume sending.
-  TELEGRAM_ENABLED: '0'
+  # Telegram alerts enabled.
+  TELEGRAM_ENABLED: '1'
 
 permissions:
   contents: write
